@@ -1,6 +1,0 @@
-{
-  "name": "rateme-bot",
-  "blocks": {
-    "entry": "src/main.ts"
-  }
-}
