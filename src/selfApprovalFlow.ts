@@ -45,7 +45,7 @@ export const selfApprovalFlowSettings: SettingsFormField = {
             name: SelfApprovalFlowSetting.RuleList,
             type: "paragraph",
             label: "Approval Rules",
-            helpText: "One rule per line. This is the text shown to users when they request approval.",
+            helpText: "One rule per line. This is the text shown to users when they request approval. Optionally, use a | to provide extra text to display smaller below the main text.",
             lineHeight: 6,
         },
         {
@@ -149,10 +149,12 @@ export const selfApprovalFlowFormDefinition: FormFunction = (data) => {
     const fields: FormField[] = [];
     let ruleId = 0;
     for (const rule of rules) {
+        const [mainText, subText] = rule.split("|").map(part => part.trim());
         fields.push({
             type: "boolean",
             name: `rule${ruleId++}`,
-            label: rule,
+            label: mainText,
+            helpText: subText.length > 0 ? subText : undefined,
             defaultValue: false,
         });
     }
