@@ -1,5 +1,5 @@
 import { Context, FormField, FormFunction, FormOnSubmitEvent, JSONObject, MenuItemOnPressEvent, SettingsFormField, SettingsValues, TriggerContext, User } from "@devvit/public-api";
-import { PostCreate } from "@devvit/protos";
+import { PostCreate, PostDelete } from "@devvit/protos";
 import { addDays } from "date-fns";
 import { selfApprovalFlowForm } from "./main.js";
 import { userIsMod } from "./utility.js";
@@ -249,6 +249,19 @@ export async function handleSelfApprovalFormSubmit (event: FormOnSubmitEvent<JSO
     context.ui.showToast("Your post has been approved. Thank you for following the rules!");
 
     const post = await context.reddit.getPostById(context.postId);
+    const comments = await post.comments.all();
+    const botComments = comments.filter(comment => comment.authorName === context.appName);
+    await Promise.all(botComments.map(comment => comment.remove()));
+}
+
+export async function handleSelfApprovalFlowPostDelete (event: PostDelete, context: TriggerContext) {
+    if (!event.postId) {
+        return;
+    }
+
+    await context.redis.del(getStickyCommentRedisKey(event.postId));
+
+    const post = await context.reddit.getPostById(event.postId);
     const comments = await post.comments.all();
     const botComments = comments.filter(comment => comment.authorName === context.appName);
     await Promise.all(botComments.map(comment => comment.remove()));
