@@ -1,7 +1,8 @@
-import { Context, FormField, FormFunction, FormOnSubmitEvent, JSONObject, MenuItemOnPressEvent, SettingsFormField, TriggerContext, User } from "@devvit/public-api";
+import { Context, FormField, FormFunction, FormOnSubmitEvent, JSONObject, MenuItemOnPressEvent, SettingsFormField, SettingsValues, TriggerContext, User } from "@devvit/public-api";
 import { PostCreate } from "@devvit/protos";
 import { addDays } from "date-fns";
 import { selfApprovalFlowForm } from "./main.js";
+import { userIsMod } from "./utility.js";
 
 enum SelfApprovalFlowSetting {
     Enabled = "selfApprovalFlowEnabled",
@@ -10,6 +11,7 @@ enum SelfApprovalFlowSetting {
     StickyPostTextManualApproval = "selfApprovalFlowStickyPostTextManualApproval",
     RuleList = "selfApprovalFlowRuleList",
     AllowMultipleSelfApprovalAttempts = "selfApprovalFlowAllowMultipleSelfApprovalAttempts",
+    IneligibleSubreddits = "selfApprovalFlowIneligibleSubreddits",
 };
 
 export const selfApprovalFlowSettings: SettingsFormField = {
@@ -55,6 +57,13 @@ export const selfApprovalFlowSettings: SettingsFormField = {
             helpText: "If enabled, users can request self-approval multiple times. If disabled, they can only request once.",
             defaultValue: false,
         },
+        {
+            name: SelfApprovalFlowSetting.IneligibleSubreddits,
+            type: "paragraph",
+            label: "Ineligible Subreddits",
+            helpText: "Comma-separated list of subreddits that, if they are present in user history, will not permit self-approval.",
+            defaultValue: "teenagers, teenagersbutbetter",
+        },
     ],
 };
 
@@ -62,7 +71,7 @@ function getStickyCommentRedisKey (postId: string): string {
     return `selfApprovalFlow:stickyComment:${postId}`;
 }
 
-async function userEligibleForSelfApproval (userId: string, context: TriggerContext): Promise<boolean> {
+async function userEligibleForSelfApproval (userId: string, settings: SettingsValues, context: TriggerContext): Promise<boolean> {
     let user: User | undefined;
     try {
         user = await context.reddit.getUserById(userId);
@@ -90,11 +99,18 @@ async function userEligibleForSelfApproval (userId: string, context: TriggerCont
         return false;
     }
 
+    const ineligibleSubredditsVal = settings[SelfApprovalFlowSetting.IneligibleSubreddits] as string | undefined ?? "";
+    const ineligibleSubreddits = ineligibleSubredditsVal.split(",").map(sub => sub.trim().toLowerCase()).filter(sub => sub.length > 0);
+
+    if (postHistory.some(post => ineligibleSubreddits.includes(post.subredditName.toLowerCase()))) {
+        return false;
+    }
+
     return true;
 }
 
 export async function handleSelfApprovalFlowPostCreate (event: PostCreate, context: TriggerContext) {
-    if (!event.post?.id || !event.post.authorId) {
+    if (!event.post?.id || !event.post.authorId || !event.author?.name) {
         return;
     }
 
@@ -112,7 +128,7 @@ export async function handleSelfApprovalFlowPostCreate (event: PostCreate, conte
         }
     }
 
-    if (!await userEligibleForSelfApproval(event.post.authorId, context)) {
+    if (!await userEligibleForSelfApproval(event.post.authorId, settings, context)) {
         console.log(`User ${event.post.authorId} not eligible for self-approval.`);
         const stickyPostTextManualApproval = settings[SelfApprovalFlowSetting.StickyPostTextManualApproval] as string | undefined;
         if (stickyPostTextManualApproval) {
@@ -123,6 +139,11 @@ export async function handleSelfApprovalFlowPostCreate (event: PostCreate, conte
             await newComment.distinguish(true);
             console.log(`Created manual approval sticky comment ${newComment.id} on post ${event.post.id}`);
         }
+        return;
+    }
+
+    if (await userIsMod(event.author.name, context)) {
+        console.log(`User ${event.author.name} is a mod, skipping self-approval flow.`);
         return;
     }
 
@@ -154,7 +175,7 @@ export const selfApprovalFlowFormDefinition: FormFunction = (data) => {
             type: "boolean",
             name: `rule${ruleId++}`,
             label: mainText,
-            helpText: subText.length > 0 ? subText : undefined,
+            helpText: subText ? subText : undefined,
             defaultValue: false,
         });
     }
