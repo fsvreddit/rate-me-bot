@@ -1,23 +1,7 @@
-# Getting started with rate-me-bot
+Handles post approval flows for /r/Rateme
 
-Your project has been created using a Devvit template.
+When a user posts on /r/Rateme, their post is automatically removed and the user is prompted to attest to the fact that their post adheres to the rules of the subreddit.
 
-## Next up
+This is only available to users who have no social links, no NSFW history and no participation history in certain subreddits, in which case the post goes to the modqueue for manual review (AutoModerator needs to be configured to always queue posts, and then the app will remove them).
 
-Next up is uploading and developing your app using playtest.
-
-In the project directory, you can run:
-
-### `devvit upload`
-
-Upload the app to the App Directory. Uploaded apps are only visible to you (the app owner) and can only be installed to a small test subreddit with less than 200 subscribers.
-
-### `devvit playtest <subreddit-name>`
-
-Installs your app to your test subreddit and starts a playtest session where a new version is installed whenever you save changes to your app code, and logs are continuously streamed.
-
-## Learn more
-
-You can learn more in the [documentation](https://developers.reddit.com/docs/).
-
-You can manage your apps in the [developer portal](https://developers.reddit.com/my/apps).
+The app has an A/B testing feature where only certain posts (based on the post ID) will be filtered to the queue during the testing phase.
