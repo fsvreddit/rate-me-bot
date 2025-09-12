@@ -86,6 +86,7 @@ async function userEligibleForSelfApproval (userId: string, settings: SettingsVa
 
     const socialLinks = await user.getSocialLinks();
     if (socialLinks.length > 0) {
+        console.log(`User ${user.username} has social links, not eligible for self-approval.`);
         return false;
     }
 
@@ -96,6 +97,7 @@ async function userEligibleForSelfApproval (userId: string, settings: SettingsVa
     }).all();
 
     if (postHistory.some(post => post.nsfw)) {
+        console.log(`User ${user.username} has NSFW posts, not eligible for self-approval.`);
         return false;
     }
 
@@ -103,6 +105,7 @@ async function userEligibleForSelfApproval (userId: string, settings: SettingsVa
     const ineligibleSubreddits = ineligibleSubredditsVal.split(",").map(sub => sub.trim().toLowerCase()).filter(sub => sub.length > 0);
 
     if (postHistory.some(post => ineligibleSubreddits.includes(post.subredditName.toLowerCase()))) {
+        console.log(`User ${user.username} has posted in ineligible subreddits, not eligible for self-approval.`);
         return false;
     }
 
