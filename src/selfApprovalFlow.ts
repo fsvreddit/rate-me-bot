@@ -259,6 +259,10 @@ export async function handleSelfApprovalFlowPostDelete (event: PostDelete, conte
         return;
     }
 
+    if (event.source as number !== 1) { // User
+        return;
+    }
+
     await context.redis.del(getStickyCommentRedisKey(event.postId));
 
     const post = await context.reddit.getPostById(event.postId);
