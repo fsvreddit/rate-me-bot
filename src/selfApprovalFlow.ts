@@ -247,6 +247,7 @@ export async function handleSelfApprovalFormSubmit (event: FormOnSubmitEvent<JSO
     await context.redis.del(getStickyCommentRedisKey(context.postId));
 
     context.ui.showToast("Your post has been approved. Thank you for following the rules!");
+    console.log(`Post ${context.postId} approved via self-approval flow.`);
 
     const post = await context.reddit.getPostById(context.postId);
     const comments = await post.comments.all();
