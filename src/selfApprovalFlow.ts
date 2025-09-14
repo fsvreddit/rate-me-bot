@@ -156,6 +156,11 @@ export async function handleSelfApprovalFlowPostCreate (event: PostCreate, conte
         return;
     }
 
+    if (post.approved) {
+        console.log(`Post ${event.post.id} is already approved, skipping self-approval flow.`);
+        return;
+    }
+
     await context.redis.set(getStickyCommentRedisKey(event.post.id), "true", { expiration: addDays(new Date(), 28) });
     await context.reddit.remove(event.post.id, false);
 
