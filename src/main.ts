@@ -1,6 +1,6 @@
 import { Devvit } from "@devvit/public-api";
 import { removeStickyCommentOnApprove } from "./stickyCommentRemover.js";
-import { handleSelfApprovalFlowPostCreate, handleSelfApprovalFlowPostDelete, handleSelfApprovalFormSubmit, handleSelfApprovalMenuItem, selfApprovalFlowFormDefinition, selfApprovalFlowSettings } from "./selfApprovalFlow.js";
+import { handleSelfApprovalFlowModAction, handleSelfApprovalFlowPostCreate, handleSelfApprovalFlowPostDelete, handleSelfApprovalFormSubmit, handleSelfApprovalMenuItem, selfApprovalFlowFormDefinition, selfApprovalFlowSettings } from "./selfApprovalFlow.js";
 
 Devvit.addSettings([
     selfApprovalFlowSettings,
@@ -28,6 +28,11 @@ Devvit.addTrigger({
 Devvit.addTrigger({
     event: "ModAction",
     onEvent: removeStickyCommentOnApprove,
+});
+
+Devvit.addTrigger({
+    event: "ModAction",
+    onEvent: handleSelfApprovalFlowModAction,
 });
 
 Devvit.configure({

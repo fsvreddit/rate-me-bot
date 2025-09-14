@@ -1,5 +1,5 @@
 import { Context, FormField, FormFunction, FormOnSubmitEvent, JSONObject, MenuItemOnPressEvent, SettingsFormField, SettingsValues, TriggerContext, User } from "@devvit/public-api";
-import { PostCreate, PostDelete } from "@devvit/protos";
+import { ModAction, PostCreate, PostDelete } from "@devvit/protos";
 import { addDays } from "date-fns";
 import { selfApprovalFlowForm } from "./main.js";
 import { userIsMod } from "./utility.js";
@@ -273,4 +273,27 @@ export async function handleSelfApprovalFlowPostDelete (event: PostDelete, conte
     const comments = await post.comments.all();
     const botComments = comments.filter(comment => comment.authorName === context.appName);
     await Promise.all(botComments.map(comment => comment.remove()));
+}
+
+export async function handleSelfApprovalFlowModAction (event: ModAction, context: TriggerContext) {
+    const relevantActions = ["removelink", "spamlink", "lock"];
+    if (!event.action || !relevantActions.includes(event.action)) {
+        return;
+    }
+
+    const postId = event.targetPost?.id;
+    if (!postId) {
+        return;
+    }
+
+    if (event.moderator?.name === context.appName || event.moderator?.name === "AutoModerator") {
+        return;
+    }
+
+    if (!await context.redis.exists(getStickyCommentRedisKey(postId))) {
+        return;
+    }
+
+    await context.redis.del(getStickyCommentRedisKey(postId));
+    console.log(`Cleared self-approval flow state for post ${postId} due to mod action ${event.action}.`);
 }
