@@ -209,6 +209,11 @@ export async function handleSelfApprovalMenuItem (_: MenuItemOnPressEvent, conte
         return;
     }
 
+    if (post.locked) {
+        context.ui.showToast("This post is locked and cannot be approved.");
+        return;
+    }
+
     if (post.authorName !== currentUser.username) {
         context.ui.showToast("Error: You can only request approval for your own posts.");
         return;
