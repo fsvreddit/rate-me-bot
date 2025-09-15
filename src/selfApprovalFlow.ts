@@ -71,6 +71,10 @@ function getStickyCommentRedisKey (postId: string): string {
     return `selfApprovalFlow:stickyComment:${postId}`;
 }
 
+function getUserIneligibleRedisKey (userId: string): string {
+    return `selfApprovalFlow:ineligibleUser:${userId}`;
+}
+
 async function userEligibleForSelfApproval (userId: string, settings: SettingsValues, context: TriggerContext): Promise<boolean> {
     let user: User | undefined;
     try {
@@ -106,6 +110,11 @@ async function userEligibleForSelfApproval (userId: string, settings: SettingsVa
 
     if (postHistory.some(post => ineligibleSubreddits.includes(post.subredditName.toLowerCase()))) {
         console.log(`User ${user.username} has posted in ineligible subreddits, not eligible for self-approval.`);
+        return false;
+    }
+
+    if (await context.redis.exists(getUserIneligibleRedisKey(userId))) {
+        console.log(`User ${user.username} is marked ineligible in Redis, not eligible for self-approval.`);
         return false;
     }
 
@@ -297,8 +306,7 @@ export async function handleSelfApprovalFlowModAction (event: ModAction, context
         return;
     }
 
-    const postId = event.targetPost?.id;
-    if (!postId) {
+    if (!event.targetPost?.id || !event.targetPost.authorId) {
         return;
     }
 
@@ -306,10 +314,11 @@ export async function handleSelfApprovalFlowModAction (event: ModAction, context
         return;
     }
 
-    if (!await context.redis.exists(getStickyCommentRedisKey(postId))) {
+    if (!await context.redis.exists(getStickyCommentRedisKey(event.targetPost.id))) {
         return;
     }
 
-    await context.redis.del(getStickyCommentRedisKey(postId));
-    console.log(`Cleared self-approval flow state for post ${postId} due to mod action ${event.action}.`);
+    await context.redis.del(getStickyCommentRedisKey(event.targetPost.id));
+    await context.redis.set(getUserIneligibleRedisKey(event.targetPost.authorId), "true", { expiration: addDays(new Date(), 28) });
+    console.log(`Cleared self-approval flow state for post ${event.targetPost.id} due to mod action ${event.action}.`);
 }
