@@ -3,6 +3,7 @@ import { ModAction, PostCreate, PostDelete } from "@devvit/protos";
 import { addDays } from "date-fns";
 import { selfApprovalFlowForm } from "./main.js";
 import { userIsMod } from "./utility.js";
+import { getUserExtended } from "./extendedDevvit.js";
 
 enum SelfApprovalFlowSetting {
     Enabled = "selfApprovalFlowEnabled",
@@ -88,6 +89,11 @@ async function userEligibleForSelfApproval (userId: string, settings: SettingsVa
         return false;
     }
 
+    if (await context.redis.exists(getUserIneligibleRedisKey(userId))) {
+        console.log(`User ${user.username} is marked ineligible in Redis, not eligible for self-approval.`);
+        return false;
+    }
+
     const socialLinks = await user.getSocialLinks();
     if (socialLinks.length > 0) {
         console.log(`User ${user.username} has social links, not eligible for self-approval.`);
@@ -113,8 +119,9 @@ async function userEligibleForSelfApproval (userId: string, settings: SettingsVa
         return false;
     }
 
-    if (await context.redis.exists(getUserIneligibleRedisKey(userId))) {
-        console.log(`User ${user.username} is marked ineligible in Redis, not eligible for self-approval.`);
+    const userExtended = await getUserExtended(user.username, context);
+    if (userExtended?.nsfw) {
+        console.log(`User ${user.username} has an NSFW account, not eligible for self-approval.`);
         return false;
     }
 
