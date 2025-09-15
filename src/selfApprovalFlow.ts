@@ -308,12 +308,7 @@ export async function handleSelfApprovalFlowPostDelete (event: PostDelete, conte
 }
 
 export async function handleSelfApprovalFlowModAction (event: ModAction, context: TriggerContext) {
-    const relevantActions = ["removelink", "spamlink", "lock"];
-    if (!event.action || !relevantActions.includes(event.action)) {
-        return;
-    }
-
-    if (!event.targetPost?.id || !event.targetPost.authorId) {
+    if (!event.action || !event.targetPost?.id || !event.targetPost.authorId) {
         return;
     }
 
@@ -321,13 +316,23 @@ export async function handleSelfApprovalFlowModAction (event: ModAction, context
         return;
     }
 
-    await context.redis.set(getUserIneligibleRedisKey(event.targetPost.authorId), "true", { expiration: addDays(new Date(), 28) });
-    console.log(`Marked user ${event.targetPost.authorId} as ineligible for self-approval due to mod action ${event.action}.`);
+    const removalActions = ["removelink", "spamlink", "lock"];
+    if (removalActions.includes(event.action)) {
+        await context.redis.set(getUserIneligibleRedisKey(event.targetPost.authorId), "true", { expiration: addDays(new Date(), 28) });
+        console.log(`Marked user ${event.targetPost.authorId} as ineligible for self-approval due to mod action ${event.action}.`);
 
-    if (!await context.redis.exists(getStickyCommentRedisKey(event.targetPost.id))) {
-        return;
+        if (!await context.redis.exists(getStickyCommentRedisKey(event.targetPost.id))) {
+            return;
+        }
+
+        await context.redis.del(getStickyCommentRedisKey(event.targetPost.id));
+        console.log(`Cleared self-approval flow state for post ${event.targetPost.id} due to mod action ${event.action}.`);
     }
 
-    await context.redis.del(getStickyCommentRedisKey(event.targetPost.id));
-    console.log(`Cleared self-approval flow state for post ${event.targetPost.id} due to mod action ${event.action}.`);
+    if (event.action === "approvelink") {
+        if (await context.redis.exists(getStickyCommentRedisKey(event.targetPost.id))) {
+            await context.redis.del(getStickyCommentRedisKey(event.targetPost.id));
+            console.log(`Cleared self-approval flow state for post ${event.targetPost.id} due to approval.`);
+        }
+    }
 }
