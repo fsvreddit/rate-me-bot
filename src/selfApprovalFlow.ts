@@ -314,11 +314,13 @@ export async function handleSelfApprovalFlowModAction (event: ModAction, context
         return;
     }
 
+    await context.redis.set(getUserIneligibleRedisKey(event.targetPost.authorId), "true", { expiration: addDays(new Date(), 28) });
+    console.log(`Marked user ${event.targetPost.authorId} as ineligible for self-approval due to mod action ${event.action}.`);
+
     if (!await context.redis.exists(getStickyCommentRedisKey(event.targetPost.id))) {
         return;
     }
 
     await context.redis.del(getStickyCommentRedisKey(event.targetPost.id));
-    await context.redis.set(getUserIneligibleRedisKey(event.targetPost.authorId), "true", { expiration: addDays(new Date(), 28) });
     console.log(`Cleared self-approval flow state for post ${event.targetPost.id} due to mod action ${event.action}.`);
 }
