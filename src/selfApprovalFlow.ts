@@ -304,7 +304,8 @@ export async function handleSelfApprovalFlowPostDelete (event: PostDelete, conte
     const post = await context.reddit.getPostById(event.postId);
     const comments = await post.comments.all();
     const botComments = comments.filter(comment => comment.authorName === context.appName);
-    await Promise.all(botComments.map(comment => comment.remove()));
+    await Promise.all(botComments.map(comment => comment.delete()));
+    console.log(`Cleared self-approval flow state for deleted post ${event.postId}.`);
 }
 
 export async function handleSelfApprovalFlowModAction (event: ModAction, context: TriggerContext) {
