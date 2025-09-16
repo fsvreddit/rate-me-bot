@@ -323,15 +323,15 @@ export async function handleSelfApprovalFlowModAction (event: ModAction, context
 
     const removalActions = ["removelink", "spamlink", "lock"];
     if (removalActions.includes(event.action)) {
-        await context.redis.set(getUserIneligibleRedisKey(event.targetPost.authorId), "true", { expiration: addDays(new Date(), 28) });
-        console.log(`Marked user ${event.targetPost.authorId} as ineligible for self-approval due to mod action ${event.action}.`);
-
-        if (!await context.redis.exists(getSelfApprovalFlowRedisKey(event.targetPost.id))) {
-            return;
+        if (!await context.redis.exists(getUserIneligibleRedisKey(event.targetPost.authorId))) {
+            await context.redis.set(getUserIneligibleRedisKey(event.targetPost.authorId), "true", { expiration: addDays(new Date(), 28) });
+            console.log(`Marked user ${event.targetPost.authorId} as ineligible for self-approval due to mod action ${event.action}.`);
         }
 
-        await context.redis.del(getSelfApprovalFlowRedisKey(event.targetPost.id));
-        console.log(`Cleared self-approval flow state for post ${event.targetPost.id} due to mod action ${event.action}.`);
+        if (await context.redis.exists(getSelfApprovalFlowRedisKey(event.targetPost.id))) {
+            await context.redis.del(getSelfApprovalFlowRedisKey(event.targetPost.id));
+            console.log(`Cleared self-approval flow state for post ${event.targetPost.id} due to mod action ${event.action}.`);
+        }
     }
 
     if (event.action === "approvelink") {
