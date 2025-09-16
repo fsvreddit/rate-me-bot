@@ -68,7 +68,7 @@ export const selfApprovalFlowSettings: SettingsFormField = {
     ],
 };
 
-function getStickyCommentRedisKey (postId: string): string {
+function getSelfApprovalFlowRedisKey (postId: string): string {
     return `selfApprovalFlow:stickyComment:${postId}`;
 }
 
@@ -177,7 +177,7 @@ export async function handleSelfApprovalFlowPostCreate (event: PostCreate, conte
         return;
     }
 
-    await context.redis.set(getStickyCommentRedisKey(event.post.id), "true", { expiration: addDays(new Date(), 28) });
+    await context.redis.set(getSelfApprovalFlowRedisKey(event.post.id), "true", { expiration: addDays(new Date(), 28) });
     await context.reddit.remove(event.post.id, false);
 
     const stickyPostText = settings[SelfApprovalFlowSetting.StickyPostText] as string | undefined;
@@ -246,7 +246,7 @@ export async function handleSelfApprovalMenuItem (_: MenuItemOnPressEvent, conte
         return;
     }
 
-    if (!await context.redis.exists(getStickyCommentRedisKey(context.postId))) {
+    if (!await context.redis.exists(getSelfApprovalFlowRedisKey(context.postId))) {
         context.ui.showToast("Error: This post is not eligible for self-approval.");
         return;
     }
@@ -273,13 +273,13 @@ export async function handleSelfApprovalFormSubmit (event: FormOnSubmitEvent<JSO
         context.ui.showToast("You must agree to all conditions. Please delete your post and resubmit a compliant post.");
         const multipleAttemptsAllowed = await context.settings.get<boolean>(SelfApprovalFlowSetting.AllowMultipleSelfApprovalAttempts) ?? false;
         if (!multipleAttemptsAllowed) {
-            await context.redis.del(getStickyCommentRedisKey(context.postId));
+            await context.redis.del(getSelfApprovalFlowRedisKey(context.postId));
         }
         return;
     }
 
     await context.reddit.approve(context.postId);
-    await context.redis.del(getStickyCommentRedisKey(context.postId));
+    await context.redis.del(getSelfApprovalFlowRedisKey(context.postId));
 
     context.ui.showToast("Your post has been approved. Thank you for following the rules!");
     console.log(`Post ${context.postId} approved via self-approval flow.`);
@@ -299,7 +299,11 @@ export async function handleSelfApprovalFlowPostDelete (event: PostDelete, conte
         return;
     }
 
-    await context.redis.del(getStickyCommentRedisKey(event.postId));
+    if (!await context.redis.exists(getSelfApprovalFlowRedisKey(event.postId))) {
+        return;
+    }
+
+    await context.redis.del(getSelfApprovalFlowRedisKey(event.postId));
 
     const post = await context.reddit.getPostById(event.postId);
     const comments = await post.comments.all();
@@ -322,17 +326,17 @@ export async function handleSelfApprovalFlowModAction (event: ModAction, context
         await context.redis.set(getUserIneligibleRedisKey(event.targetPost.authorId), "true", { expiration: addDays(new Date(), 28) });
         console.log(`Marked user ${event.targetPost.authorId} as ineligible for self-approval due to mod action ${event.action}.`);
 
-        if (!await context.redis.exists(getStickyCommentRedisKey(event.targetPost.id))) {
+        if (!await context.redis.exists(getSelfApprovalFlowRedisKey(event.targetPost.id))) {
             return;
         }
 
-        await context.redis.del(getStickyCommentRedisKey(event.targetPost.id));
+        await context.redis.del(getSelfApprovalFlowRedisKey(event.targetPost.id));
         console.log(`Cleared self-approval flow state for post ${event.targetPost.id} due to mod action ${event.action}.`);
     }
 
     if (event.action === "approvelink") {
-        if (await context.redis.exists(getStickyCommentRedisKey(event.targetPost.id))) {
-            await context.redis.del(getStickyCommentRedisKey(event.targetPost.id));
+        if (await context.redis.exists(getSelfApprovalFlowRedisKey(event.targetPost.id))) {
+            await context.redis.del(getSelfApprovalFlowRedisKey(event.targetPost.id));
             console.log(`Cleared self-approval flow state for post ${event.targetPost.id} due to approval.`);
         }
     }
