@@ -1,9 +1,10 @@
 import { Context, FormField, FormFunction, FormOnSubmitEvent, JSONObject, MenuItemOnPressEvent, SettingsFormField, SettingsValues, TriggerContext, User } from "@devvit/public-api";
 import { ModAction, PostCreate, PostDelete } from "@devvit/protos";
-import { addDays } from "date-fns";
+import { addDays, format, subDays } from "date-fns";
 import { selfApprovalFlowForm } from "./main.js";
 import { userIsMod } from "./utility.js";
 import { getUserExtended } from "./extendedDevvit.js";
+import { PostV2 } from "@devvit/protos/types/devvit/reddit/v2alpha/postv2.js";
 
 enum SelfApprovalFlowSetting {
     Enabled = "selfApprovalFlowEnabled",
@@ -13,6 +14,8 @@ enum SelfApprovalFlowSetting {
     RuleList = "selfApprovalFlowRuleList",
     AllowMultipleSelfApprovalAttempts = "selfApprovalFlowAllowMultipleSelfApprovalAttempts",
     IneligibleSubreddits = "selfApprovalFlowIneligibleSubreddits",
+    IneligibleTitleRegex = "selfApprovalFlowIneligibleTitleRegex",
+    IneligibleAccountMaxAgeDays = "selfApprovalFlowIneligibleAccountMaxAgeDays",
 };
 
 export const selfApprovalFlowSettings: SettingsFormField = {
@@ -65,6 +68,19 @@ export const selfApprovalFlowSettings: SettingsFormField = {
             helpText: "Comma-separated list of subreddits that, if they are present in user history, will not permit self-approval.",
             defaultValue: "teenagers, teenagersbutbetter",
         },
+        {
+            name: SelfApprovalFlowSetting.IneligibleTitleRegex,
+            type: "string",
+            label: "Ineligible Title Regex",
+            helpText: "If a post title matches this regex, the user will not be eligible for self-approval.",
+        },
+        {
+            name: SelfApprovalFlowSetting.IneligibleAccountMaxAgeDays,
+            type: "number",
+            label: "Ineligible Account Max Age (Days)",
+            helpText: "If a user's account is younger than this number of days, they will not be eligible for self-approval. Set to zero to disable.",
+            defaultValue: 0,
+        },
     ],
 };
 
@@ -76,10 +92,19 @@ function getUserIneligibleRedisKey (userId: string): string {
     return `selfApprovalFlow:ineligibleUser:${userId}`;
 }
 
-async function userEligibleForSelfApproval (userId: string, settings: SettingsValues, context: TriggerContext): Promise<boolean> {
+async function userEligibleForSelfApproval (post: PostV2, settings: SettingsValues, context: TriggerContext): Promise<boolean> {
+    const ineligibleTitleRegex = settings[SelfApprovalFlowSetting.IneligibleTitleRegex] as string | undefined;
+    if (ineligibleTitleRegex) {
+        const regex = new RegExp(ineligibleTitleRegex);
+        if (regex.test(post.title)) {
+            console.log(`Post ${post.id} title matches ineligible regex ${ineligibleTitleRegex}.`);
+            return false;
+        }
+    }
+
     let user: User | undefined;
     try {
-        user = await context.reddit.getUserById(userId);
+        user = await context.reddit.getUserById(post.authorId);
     } catch (error) {
         console.error("Error fetching user:", error);
         return false;
@@ -89,9 +114,17 @@ async function userEligibleForSelfApproval (userId: string, settings: SettingsVa
         return false;
     }
 
-    if (await context.redis.exists(getUserIneligibleRedisKey(userId))) {
+    if (await context.redis.exists(getUserIneligibleRedisKey(user.id))) {
         console.log(`User ${user.username} is marked ineligible in Redis, not eligible for self-approval.`);
         return false;
+    }
+
+    const accountMaxAgeDays = settings[SelfApprovalFlowSetting.IneligibleAccountMaxAgeDays] as number | undefined ?? 0;
+    if (accountMaxAgeDays > 0) {
+        if (user.createdAt > subDays(new Date(), accountMaxAgeDays)) {
+            console.log(`User ${user.username} is too new (created at ${format(user.createdAt, "yyyy-MM-dd")}), not eligible for self-approval.`);
+            return false;
+        }
     }
 
     const socialLinks = await user.getSocialLinks();
@@ -147,7 +180,7 @@ export async function handleSelfApprovalFlowPostCreate (event: PostCreate, conte
         }
     }
 
-    if (!await userEligibleForSelfApproval(event.post.authorId, settings, context)) {
+    if (!await userEligibleForSelfApproval(event.post, settings, context)) {
         console.log(`User ${event.post.authorId} not eligible for self-approval.`);
         const stickyPostTextManualApproval = settings[SelfApprovalFlowSetting.StickyPostTextManualApproval] as string | undefined;
         if (stickyPostTextManualApproval) {
