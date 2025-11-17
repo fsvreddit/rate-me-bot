@@ -5,12 +5,14 @@
   "license": "BSD-3-Clause",
   "type": "module",
   "scripts": {
+    "deploy": "devvit upload && devvit publish && devvit install Rateme",
+    "logs": "devvit logs botbouncer --verbose --since 5m",
     "test": "npm run test:unit",
     "test:unit": "vitest --run"
   },
   "dependencies": {
-    "@devvit/protos": "0.12.0",
-    "@devvit/public-api": "0.12.0",
+    "@devvit/protos": "0.12.2",
+    "@devvit/public-api": "0.12.2",
     "date-fns": "^4.1.0"
   },
   "devDependencies": {
@@ -20,6 +22,6 @@
     "eslint": "^9.14.0",
     "typescript": "5.8.3",
     "typescript-eslint": "^8.4.0",
-    "vitest": "^3.0.5"
+    "vitest": "^4.0.10"
   }
 }
