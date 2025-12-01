@@ -25,8 +25,12 @@ export async function removeStickyCommentOnApprove (event: ModAction, context: T
         return;
     }
 
-    await stickyComment.remove();
-    await context.redis.set(handledKey, "true", { expiration: addDays(new Date(), 28) });
+    if (stickyComment.authorName === context.appName) {
+        await stickyComment.delete();
+        console.log(`${event.action}: Deleted sticky comment from post ${postId}`);
+    } else {
+        await stickyComment.remove();
+    }
 
-    console.log(`${event.action}: Removed sticky comment from post ${postId}`);
+    await context.redis.set(handledKey, "true", { expiration: addDays(new Date(), 28) });
 }

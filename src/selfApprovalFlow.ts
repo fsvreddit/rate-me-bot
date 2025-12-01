@@ -2,9 +2,9 @@ import { Context, FormField, FormFunction, FormOnSubmitEvent, JSONObject, MenuIt
 import { ModAction, PostCreate, PostDelete } from "@devvit/protos";
 import { addDays, format, subDays } from "date-fns";
 import { selfApprovalFlowForm } from "./main.js";
-import { userIsMod } from "./utility.js";
 import { getUserExtended } from "./extendedDevvit.js";
 import { PostV2 } from "@devvit/protos/types/devvit/reddit/v2alpha/postv2.js";
+import { isModerator } from "devvit-helpers";
 
 enum SelfApprovalFlowSetting {
     Enabled = "selfApprovalFlowEnabled",
@@ -194,7 +194,8 @@ export async function handleSelfApprovalFlowPostCreate (event: PostCreate, conte
         return;
     }
 
-    if (await userIsMod(event.author.name, context)) {
+    const subredditName = context.subredditName ?? await context.reddit.getCurrentSubredditName();
+    if (await isModerator(context.reddit, subredditName, event.author.name)) {
         console.log(`User ${event.author.name} is a mod, skipping self-approval flow.`);
         return;
     }
