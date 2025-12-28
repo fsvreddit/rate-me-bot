@@ -321,7 +321,7 @@ export async function handleSelfApprovalFormSubmit (event: FormOnSubmitEvent<JSO
     const post = await context.reddit.getPostById(context.postId);
     const comments = await post.comments.all();
     const botComments = comments.filter(comment => comment.authorName === context.appName);
-    await Promise.all(botComments.map(comment => comment.remove()));
+    await Promise.all(botComments.map(comment => comment.delete()));
 }
 
 export async function handleSelfApprovalFlowPostDelete (event: PostDelete, context: TriggerContext) {
@@ -365,6 +365,13 @@ export async function handleSelfApprovalFlowModAction (event: ModAction, context
         if (await context.redis.exists(getSelfApprovalFlowRedisKey(event.targetPost.id))) {
             await context.redis.del(getSelfApprovalFlowRedisKey(event.targetPost.id));
             console.log(`Cleared self-approval flow state for post ${event.targetPost.id} due to mod action ${event.action}.`);
+        }
+
+        if (event.action !== "lock") {
+            const post = await context.reddit.getPostById(event.targetPost.id);
+            const comments = await post.comments.all();
+            const botComments = comments.filter(comment => comment.authorName === context.appName);
+            await Promise.all(botComments.map(comment => comment.delete()));
         }
     }
 
