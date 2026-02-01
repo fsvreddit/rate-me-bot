@@ -15,7 +15,7 @@ export async function removeStickyCommentOnApprove (event: ModAction, context: T
     const post = await context.reddit.getPostById(postId);
     const comments = await post.comments.all();
 
-    const stickyComment = comments.find(comment => comment.stickied && (comment.authorName === "AutoModerator" || comment.authorName === context.appName));
+    const stickyComment = comments.find(comment => comment.stickied && (comment.authorName === "AutoModerator" || comment.authorName === context.appSlug));
     if (!stickyComment) {
         return;
     }
@@ -25,7 +25,7 @@ export async function removeStickyCommentOnApprove (event: ModAction, context: T
         return;
     }
 
-    if (stickyComment.authorName === context.appName) {
+    if (stickyComment.authorName === context.appSlug) {
         await stickyComment.delete();
         console.log(`${event.action}: Deleted sticky comment from post ${postId}`);
     } else {

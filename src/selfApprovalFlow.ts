@@ -320,7 +320,7 @@ export async function handleSelfApprovalFormSubmit (event: FormOnSubmitEvent<JSO
 
     const post = await context.reddit.getPostById(context.postId);
     const comments = await post.comments.all();
-    const botComments = comments.filter(comment => comment.authorName === context.appName);
+    const botComments = comments.filter(comment => comment.authorName === context.appSlug);
     await Promise.all(botComments.map(comment => comment.delete()));
 }
 
@@ -341,7 +341,7 @@ export async function handleSelfApprovalFlowPostDelete (event: PostDelete, conte
 
     const post = await context.reddit.getPostById(event.postId);
     const comments = await post.comments.all();
-    const botComments = comments.filter(comment => comment.authorName === context.appName);
+    const botComments = comments.filter(comment => comment.authorName === context.appSlug);
     await Promise.all(botComments.map(comment => comment.delete()));
     console.log(`Cleared self-approval flow state for deleted post ${event.postId}.`);
 }
@@ -351,7 +351,7 @@ export async function handleSelfApprovalFlowModAction (event: ModAction, context
         return;
     }
 
-    if (event.moderator?.name === context.appName || event.moderator?.name === "AutoModerator") {
+    if (event.moderator?.name === context.appSlug || event.moderator?.name === "AutoModerator") {
         return;
     }
 
@@ -370,7 +370,7 @@ export async function handleSelfApprovalFlowModAction (event: ModAction, context
         if (event.action !== "lock") {
             const post = await context.reddit.getPostById(event.targetPost.id);
             const comments = await post.comments.all();
-            const botComments = comments.filter(comment => comment.authorName === context.appName);
+            const botComments = comments.filter(comment => comment.authorName === context.appSlug);
             await Promise.all(botComments.map(comment => comment.delete()));
         }
     }
