@@ -5,7 +5,7 @@
   "license": "BSD-3-Clause",
   "type": "module",
   "scripts": {
-    "deploy": "devvit upload && devvit publish && devvit install Rateme",
+    "deploy": "devvit publish && devvit install Rateme",
     "logs": "devvit logs Rateme --verbose --since 5m",
     "test": "npm run test:unit",
     "test:unit": "vitest --run"
@@ -14,7 +14,9 @@
     "@devvit/protos": "0.12.17",
     "@devvit/public-api": "0.12.17",
     "date-fns": "^4.1.0",
-    "devvit-helpers": "^0.8.3"
+    "devvit-helpers": "^0.8.3",
+    "openai": "^6.33.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@fsvreddit/eslint-config": "github:fsvreddit/eslint-config",

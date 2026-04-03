@@ -5,6 +5,7 @@ import { selfApprovalFlowForm } from "./main.js";
 import { getUserExtended } from "./extendedDevvit.js";
 import { PostV2 } from "@devvit/protos/types/devvit/reddit/v2alpha/postv2.js";
 import { isModerator } from "devvit-helpers";
+import { PostCreateCheckResult } from "./postCreation.js";
 
 enum SelfApprovalFlowSetting {
     Enabled = "selfApprovalFlowEnabled",
@@ -97,7 +98,7 @@ async function userEligibleForSelfApproval (post: PostV2, settings: SettingsValu
     if (ineligibleTitleRegex) {
         const regex = new RegExp(ineligibleTitleRegex);
         if (regex.test(post.title)) {
-            console.log(`Post ${post.id} title matches ineligible regex ${ineligibleTitleRegex}.`);
+            console.log(`Self Approval: Post ${post.id} title matches ineligible regex ${ineligibleTitleRegex}.`);
             return false;
         }
     }
@@ -106,7 +107,7 @@ async function userEligibleForSelfApproval (post: PostV2, settings: SettingsValu
     try {
         user = await context.reddit.getUserById(post.authorId);
     } catch (error) {
-        console.error("Error fetching user:", error);
+        console.error("Self Approval: Error fetching user:", error);
         return false;
     }
 
@@ -115,21 +116,21 @@ async function userEligibleForSelfApproval (post: PostV2, settings: SettingsValu
     }
 
     if (await context.redis.exists(getUserIneligibleRedisKey(user.id))) {
-        console.log(`User ${user.username} is marked ineligible in Redis, not eligible for self-approval.`);
+        console.log(`Self Approval: User ${user.username} is marked ineligible in Redis, not eligible for self-approval.`);
         return false;
     }
 
     const accountMaxAgeDays = settings[SelfApprovalFlowSetting.IneligibleAccountMaxAgeDays] as number | undefined ?? 0;
     if (accountMaxAgeDays > 0) {
         if (user.createdAt > subDays(new Date(), accountMaxAgeDays)) {
-            console.log(`User ${user.username} is too new (created at ${format(user.createdAt, "yyyy-MM-dd")}), not eligible for self-approval.`);
+            console.log(`Self Approval: User ${user.username} is too new (created at ${format(user.createdAt, "yyyy-MM-dd")}), not eligible for self-approval.`);
             return false;
         }
     }
 
     const socialLinks = await user.getSocialLinks();
     if (socialLinks.length > 0) {
-        console.log(`User ${user.username} has social links, not eligible for self-approval.`);
+        console.log(`Self Approval: User ${user.username} has social links, not eligible for self-approval.`);
         return false;
     }
 
@@ -140,7 +141,7 @@ async function userEligibleForSelfApproval (post: PostV2, settings: SettingsValu
     }).all();
 
     if (postHistory.some(post => post.nsfw)) {
-        console.log(`User ${user.username} has NSFW posts, not eligible for self-approval.`);
+        console.log(`Self Approval: User ${user.username} has NSFW posts, not eligible for self-approval.`);
         return false;
     }
 
@@ -148,40 +149,40 @@ async function userEligibleForSelfApproval (post: PostV2, settings: SettingsValu
     const ineligibleSubreddits = ineligibleSubredditsVal.split(",").map(sub => sub.trim().toLowerCase()).filter(sub => sub.length > 0);
 
     if (postHistory.some(post => ineligibleSubreddits.includes(post.subredditName.toLowerCase()))) {
-        console.log(`User ${user.username} has posted in ineligible subreddits, not eligible for self-approval.`);
+        console.log(`Self Approval: User ${user.username} has posted in ineligible subreddits, not eligible for self-approval.`);
         return false;
     }
 
     const userExtended = await getUserExtended(user.username, context);
     if (userExtended?.nsfw) {
-        console.log(`User ${user.username} has an NSFW account, not eligible for self-approval.`);
+        console.log(`Self Approval: User ${user.username} has an NSFW account, not eligible for self-approval.`);
         return false;
     }
 
     return true;
 }
 
-export async function handleSelfApprovalFlowPostCreate (event: PostCreate, context: TriggerContext) {
+export async function handleSelfApprovalFlowPostCreate (event: PostCreate, context: TriggerContext): Promise<PostCreateCheckResult> {
     if (!event.post?.id || !event.post.authorId || !event.author?.name) {
-        return;
+        return PostCreateCheckResult.Continue;
     }
 
     const settings = await context.settings.getAll();
     if (!settings[SelfApprovalFlowSetting.Enabled]) {
-        return;
+        return PostCreateCheckResult.Continue;
     }
 
     const postIdRegex = settings[SelfApprovalFlowSetting.PostIdRegex] as string | undefined;
     if (postIdRegex) {
         const regex = new RegExp(postIdRegex);
         if (!regex.test(event.post.id)) {
-            console.log(`Post ID ${event.post.id} does not match regex ${postIdRegex}.`);
-            return;
+            console.log(`Self Approval: Post ID ${event.post.id} does not match regex ${postIdRegex}.`);
+            return PostCreateCheckResult.Continue;
         }
     }
 
     if (!await userEligibleForSelfApproval(event.post, settings, context)) {
-        console.log(`User ${event.post.authorId} not eligible for self-approval.`);
+        console.log(`Self Approval: User ${event.post.authorId} not eligible for self-approval.`);
         const stickyPostTextManualApproval = settings[SelfApprovalFlowSetting.StickyPostTextManualApproval] as string | undefined;
         if (stickyPostTextManualApproval) {
             const newComment = await context.reddit.submitComment({
@@ -189,26 +190,26 @@ export async function handleSelfApprovalFlowPostCreate (event: PostCreate, conte
                 text: stickyPostTextManualApproval,
             });
             await newComment.distinguish(true);
-            console.log(`Created manual approval sticky comment ${newComment.id} on post ${event.post.id}`);
+            console.log(`Self Approval: Created manual approval sticky comment ${newComment.id} on post ${event.post.id}`);
         }
-        return;
+        return PostCreateCheckResult.Continue;
     }
 
     const subredditName = context.subredditName ?? await context.reddit.getCurrentSubredditName();
     if (await isModerator(context.reddit, subredditName, event.author.name)) {
-        console.log(`User ${event.author.name} is a mod, skipping self-approval flow.`);
-        return;
+        console.log(`Self Approval: User ${event.author.name} is a mod, skipping self-approval flow.`);
+        return PostCreateCheckResult.Continue;
     }
 
     const post = await context.reddit.getPostById(event.post.id);
     if (post.removed) {
-        console.log(`Post ${event.post.id} is already removed, skipping self-approval flow.`);
-        return;
+        console.log(`Self Approval: Post ${event.post.id} is already removed, skipping self-approval flow.`);
+        return PostCreateCheckResult.Continue;
     }
 
     if (post.approved) {
-        console.log(`Post ${event.post.id} is already approved, skipping self-approval flow.`);
-        return;
+        console.log(`Self Approval: Post ${event.post.id} is already approved, skipping self-approval flow.`);
+        return PostCreateCheckResult.Continue;
     }
 
     await context.redis.set(getSelfApprovalFlowRedisKey(event.post.id), "true", { expiration: addDays(new Date(), 28) });
@@ -216,8 +217,8 @@ export async function handleSelfApprovalFlowPostCreate (event: PostCreate, conte
 
     const stickyPostText = settings[SelfApprovalFlowSetting.StickyPostText] as string | undefined;
     if (!stickyPostText) {
-        console.warn("Sticky post text not set in settings.");
-        return;
+        console.warn("Self Approval: Sticky post text not set in settings.");
+        return PostCreateCheckResult.Continue;
     }
 
     const newComment = await context.reddit.submitComment({
@@ -226,7 +227,9 @@ export async function handleSelfApprovalFlowPostCreate (event: PostCreate, conte
     });
 
     await newComment.distinguish(true);
-    console.log(`Created sticky comment ${newComment.id} on post ${event.post.id}`);
+    console.log(`Self Approval: Created sticky comment ${newComment.id} on post ${event.post.id}`);
+
+    return PostCreateCheckResult.Stop;
 }
 
 export const selfApprovalFlowFormDefinition: FormFunction = (data) => {
@@ -316,7 +319,7 @@ export async function handleSelfApprovalFormSubmit (event: FormOnSubmitEvent<JSO
     await context.redis.del(getSelfApprovalFlowRedisKey(context.postId));
 
     context.ui.showToast("Your post has been approved. Thank you for following the rules!");
-    console.log(`Post ${context.postId} approved via self-approval flow.`);
+    console.log(`Self Approval: Post ${context.postId} approved via self-approval flow.`);
 
     const post = await context.reddit.getPostById(context.postId);
     const comments = await post.comments.all();
@@ -343,7 +346,7 @@ export async function handleSelfApprovalFlowPostDelete (event: PostDelete, conte
     const comments = await post.comments.all();
     const botComments = comments.filter(comment => comment.authorName === context.appSlug);
     await Promise.all(botComments.map(comment => comment.delete()));
-    console.log(`Cleared self-approval flow state for deleted post ${event.postId}.`);
+    console.log(`Self Approval: Cleared self-approval flow state for deleted post ${event.postId}.`);
 }
 
 export async function handleSelfApprovalFlowModAction (event: ModAction, context: TriggerContext) {
@@ -359,12 +362,12 @@ export async function handleSelfApprovalFlowModAction (event: ModAction, context
     if (removalActions.includes(event.action)) {
         if (!await context.redis.exists(getUserIneligibleRedisKey(event.targetPost.authorId))) {
             await context.redis.set(getUserIneligibleRedisKey(event.targetPost.authorId), "true", { expiration: addDays(new Date(), 28) });
-            console.log(`Marked user ${event.targetPost.authorId} as ineligible for self-approval due to mod action ${event.action}.`);
+            console.log(`Self Approval: Marked user ${event.targetPost.authorId} as ineligible for self-approval due to mod action ${event.action}.`);
         }
 
         if (await context.redis.exists(getSelfApprovalFlowRedisKey(event.targetPost.id))) {
             await context.redis.del(getSelfApprovalFlowRedisKey(event.targetPost.id));
-            console.log(`Cleared self-approval flow state for post ${event.targetPost.id} due to mod action ${event.action}.`);
+            console.log(`Self Approval: Cleared self-approval flow state for post ${event.targetPost.id} due to mod action ${event.action}.`);
         }
 
         if (event.action !== "lock") {
@@ -378,7 +381,7 @@ export async function handleSelfApprovalFlowModAction (event: ModAction, context
     if (event.action === "approvelink") {
         if (await context.redis.exists(getSelfApprovalFlowRedisKey(event.targetPost.id))) {
             await context.redis.del(getSelfApprovalFlowRedisKey(event.targetPost.id));
-            console.log(`Cleared self-approval flow state for post ${event.targetPost.id} due to approval.`);
+            console.log(`Self Approval: Cleared self-approval flow state for post ${event.targetPost.id} due to approval.`);
         }
     }
 }
