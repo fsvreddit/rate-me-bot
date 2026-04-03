@@ -173,6 +173,6 @@ export async function checkPostForSignDuringPostCreate (event: PostCreate, conte
         return PostCreateCheckResult.Stop;
     }
 
-    console.log(`OpenAI Checks: Post ${postId} has a probability of ${probabilityOfSign * 100}% of containing a sign, which is above the threshold of ${threshold * 100}%.`);
+    console.log(`OpenAI Checks: Post ${postId} has a probability of ${probabilityOfSign * 100}% of containing a sign, which is above the threshold of ${threshold}%.`);
     return PostCreateCheckResult.Continue;
 }
