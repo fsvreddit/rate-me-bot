@@ -3,6 +3,7 @@ import { removeStickyCommentOnApprove } from "./stickyCommentRemover.js";
 import { handleSelfApprovalFlowModAction, handleSelfApprovalFlowPostDelete, handleSelfApprovalFormSubmit, handleSelfApprovalMenuItem, selfApprovalFlowFormDefinition, selfApprovalFlowSettings } from "./selfApprovalFlow.js";
 import { checkPostManually, settingsForOpenAI } from "./openAIChecks.js";
 import { handlePostCreate } from "./postCreation.js";
+import { handleInstallTasks } from "./installTasks.js";
 
 Devvit.addSettings([
     selfApprovalFlowSettings,
@@ -23,6 +24,11 @@ Devvit.addMenuItem({
     location: "post",
     forUserType: "moderator",
     onPress: checkPostManually,
+});
+
+Devvit.addTrigger({
+    events: ["AppInstall", "AppUpgrade"],
+    onEvent: handleInstallTasks,
 });
 
 Devvit.addTrigger({

@@ -4,6 +4,8 @@
     "blocks": {
         "entry": "src/main.ts",
         "triggers": [
+            "onAppInstall",
+            "onAppUpgrade",
             "onPostCreate",
             "onPostDelete",
             "onModAction"
