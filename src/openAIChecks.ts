@@ -9,11 +9,17 @@ import { addHours } from "date-fns";
 
 enum OpenAISetting {
     OpenAIChecksEnabled = "openAIChecksEnabled",
+    OpenAIModel = "openAIModel",
     ProbabilityThreshold = "openAIProbabilityThreshold",
     RemovalReason = "openAIRemovalReason",
 
     // Secrets
     APIKey = "openAIAPIKey",
+}
+
+enum OpenAIModelOption {
+    GPT54Mini = "gpt-5.4-mini",
+    GPT54Nano = "gpt-5.4-nano",
 }
 
 export const settingsForOpenAI: SettingsFormField[] = [
@@ -26,6 +32,22 @@ export const settingsForOpenAI: SettingsFormField[] = [
                 name: OpenAISetting.OpenAIChecksEnabled,
                 label: "Enable OpenAI checks",
                 defaultValue: false,
+            },
+            {
+                type: "select",
+                name: OpenAISetting.OpenAIModel,
+                label: "OpenAI model to use",
+                options: [
+                    { label: "GPT-5.4 Mini", value: OpenAIModelOption.GPT54Mini },
+                    { label: "GPT-5.4 Nano", value: OpenAIModelOption.GPT54Nano },
+                ],
+                multiSelect: false,
+                defaultValue: [OpenAIModelOption.GPT54Mini],
+                onValidate: ({ value }) => {
+                    if (!value || value.length === 0) {
+                        return "Please select a model.";
+                    }
+                },
             },
             {
                 type: "number",
@@ -98,8 +120,10 @@ export async function checkPostForSign (post: Post, context: TriggerContext): Pr
         probability: z.number().min(0).max(1),
     });
 
+    const [model] = await context.settings.get<string[]>(OpenAISetting.OpenAIModel) as OpenAIModelOption[] | undefined ?? [OpenAIModelOption.GPT54Mini];
+
     const response = await openAIClient.responses.create({
-        model: "gpt-5.4-mini",
+        model,
         input: [
             {
                 role: "user",
