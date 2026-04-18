@@ -104,7 +104,7 @@ export async function checkPostForSign (post: Post, context: TriggerContext): Pr
     const content: ResponseInputMessageContentList = [
         {
             type: "input_text",
-            text: "Do any of these images appear to contain a human holding a handwritten sign with text on it? Return the probability from 0 to 1 that this is the case and the URL that I passed in of the image most likely to contain such a sign if one exists.",
+            text: "Do any of these images appear to contain a human holding a handwritten sign with text on it? Return the probability from 0 to 1 that this is the case and the full URL as passed in alongside this prompt of the image most likely to contain such a sign if one exists.",
         },
     ];
 
