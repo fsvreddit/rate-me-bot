@@ -104,7 +104,7 @@ export async function checkPostForSign (post: Post, context: TriggerContext): Pr
     const content: ResponseInputMessageContentList = [
         {
             type: "input_text",
-            text: "Do any of these images appear to contain a human holding a handwritten sign with text on it? Return the probability from 0 to 1 that this is the case and the URL of the image most likely to contain such a sign if one exists.",
+            text: "Do any of these images appear to contain a human holding a handwritten sign with text on it? Return the probability from 0 to 1 that this is the case and the URL that I passed in of the image most likely to contain such a sign if one exists.",
         },
     ];
 
@@ -193,8 +193,12 @@ export async function checkPostForSignDuringPostCreate (event: PostCreate, setti
 
     const data: JSONObject = {};
     if (imageUrl) {
-        console.log(`OpenAI Checks: Image URL for post ${postId} that is most likely to contain a sign: ${imageUrl}`);
-        data.imageUrl = imageUrl;
+        if (imageUrl.startsWith("http")) {
+            console.log(`OpenAI Checks: Image URL for post ${postId} that is most likely to contain a sign: ${imageUrl}`);
+            data.imageUrl = imageUrl;
+        } else {
+            console.warn(`OpenAI Checks: Received image URL that does not appear to be valid for post ${postId}: ${imageUrl}`);
+        }
     }
 
     return { action: PostCreateCheckAction.Continue, data };
