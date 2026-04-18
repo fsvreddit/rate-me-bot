@@ -83,7 +83,7 @@ export const settingsForOpenAI: SettingsFormField[] = [
 
 interface ProbabilityResponse {
     probability: number;
-    imageUrl?: string;
+    fileId?: string;
 }
 
 export async function checkPostForSign (post: Post, context: TriggerContext): Promise<ProbabilityResponse> {
@@ -104,7 +104,7 @@ export async function checkPostForSign (post: Post, context: TriggerContext): Pr
     const content: ResponseInputMessageContentList = [
         {
             type: "input_text",
-            text: "Do any of these images appear to contain a human holding a handwritten sign with text on it? Return the probability from 0 to 1 that this is the case and the full URL as passed in alongside this prompt of the image most likely to contain such a sign if one exists.",
+            text: "Do any of these images appear to contain a human holding a handwritten sign with text on it? Return the probability from 0 to 1 that this is the case and the File ID as passed in alongside this prompt of the image most likely to contain such a sign if one exists.",
         },
     ];
 
@@ -113,13 +113,16 @@ export async function checkPostForSign (post: Post, context: TriggerContext): Pr
             type: "input_image",
             // eslint-disable-next-line camelcase
             image_url: url,
+            // eslint-disable-next-line camelcase
+            file_id: url, // Using the URL as the file ID since we won't have a separate file ID from Reddit
             detail: "auto",
+
         });
     }
 
     const responseFormat = z.object({
         probability: z.number().min(0).max(1),
-        imageUrl: z.string().optional().nullable(),
+        fileId: z.string().optional().nullable(),
     });
 
     const [model] = await context.settings.get<string[]>(OpenAISetting.OpenAIModel) as OpenAIModelOption[] | undefined ?? [OpenAIModelOption.GPT54Mini];
@@ -166,7 +169,7 @@ export async function checkPostForSignDuringPostCreate (event: PostCreate, setti
     } else {
         const result = await checkPostForSign(post, context);
         probabilityOfSign = result.probability;
-        imageUrl = result.imageUrl;
+        imageUrl = result.fileId;
 
         await context.redis.set(cachedResultKey, probabilityOfSign.toString(), { expiration: addHours(new Date(), 1) });
     }
