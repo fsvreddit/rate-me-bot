@@ -5,7 +5,7 @@ import { selfApprovalFlowForm } from "./main.js";
 import { getUserExtended } from "./extendedDevvit.js";
 import { PostV2 } from "@devvit/protos/types/devvit/reddit/v2alpha/postv2.js";
 import { isModerator } from "devvit-helpers";
-import { PostCreateCheckResult } from "./postCreation.js";
+import { PostCreateCheckAction, PostCreateCheckResult } from "./postCreation.js";
 
 enum SelfApprovalFlowSetting {
     Enabled = "selfApprovalFlowEnabled",
@@ -162,14 +162,13 @@ async function userEligibleForSelfApproval (post: PostV2, settings: SettingsValu
     return true;
 }
 
-export async function handleSelfApprovalFlowPostCreate (event: PostCreate, context: TriggerContext): Promise<PostCreateCheckResult> {
+export async function handleSelfApprovalFlowPostCreate (event: PostCreate, settings: SettingsValues, context: TriggerContext): Promise<PostCreateCheckResult> {
     if (!event.post?.id || !event.post.authorId || !event.author?.name) {
-        return PostCreateCheckResult.Continue;
+        return { action: PostCreateCheckAction.Continue };
     }
 
-    const settings = await context.settings.getAll();
     if (!settings[SelfApprovalFlowSetting.Enabled]) {
-        return PostCreateCheckResult.Continue;
+        return { action: PostCreateCheckAction.Continue };
     }
 
     const postIdRegex = settings[SelfApprovalFlowSetting.PostIdRegex] as string | undefined;
@@ -177,7 +176,7 @@ export async function handleSelfApprovalFlowPostCreate (event: PostCreate, conte
         const regex = new RegExp(postIdRegex);
         if (!regex.test(event.post.id)) {
             console.log(`Self Approval: Post ID ${event.post.id} does not match regex ${postIdRegex}.`);
-            return PostCreateCheckResult.Continue;
+            return { action: PostCreateCheckAction.Continue };
         }
     }
 
@@ -192,24 +191,24 @@ export async function handleSelfApprovalFlowPostCreate (event: PostCreate, conte
             await newComment.distinguish(true);
             console.log(`Self Approval: Created manual approval sticky comment ${newComment.id} on post ${event.post.id}`);
         }
-        return PostCreateCheckResult.Continue;
+        return { action: PostCreateCheckAction.Continue };
     }
 
     const subredditName = context.subredditName ?? await context.reddit.getCurrentSubredditName();
     if (await isModerator(context.reddit, subredditName, event.author.name)) {
         console.log(`Self Approval: User ${event.author.name} is a mod, skipping self-approval flow.`);
-        return PostCreateCheckResult.Continue;
+        return { action: PostCreateCheckAction.Continue };
     }
 
     const post = await context.reddit.getPostById(event.post.id);
     if (post.removed) {
         console.log(`Self Approval: Post ${event.post.id} is already removed, skipping self-approval flow.`);
-        return PostCreateCheckResult.Continue;
+        return { action: PostCreateCheckAction.Continue };
     }
 
     if (post.approved) {
         console.log(`Self Approval: Post ${event.post.id} is already approved, skipping self-approval flow.`);
-        return PostCreateCheckResult.Continue;
+        return { action: PostCreateCheckAction.Continue };
     }
 
     await context.redis.set(getSelfApprovalFlowRedisKey(event.post.id), "true", { expiration: addDays(new Date(), 28) });
@@ -218,7 +217,7 @@ export async function handleSelfApprovalFlowPostCreate (event: PostCreate, conte
     const stickyPostText = settings[SelfApprovalFlowSetting.StickyPostText] as string | undefined;
     if (!stickyPostText) {
         console.warn("Self Approval: Sticky post text not set in settings.");
-        return PostCreateCheckResult.Continue;
+        return { action: PostCreateCheckAction.Continue };
     }
 
     const newComment = await context.reddit.submitComment({
@@ -229,7 +228,7 @@ export async function handleSelfApprovalFlowPostCreate (event: PostCreate, conte
     await newComment.distinguish(true);
     console.log(`Self Approval: Created sticky comment ${newComment.id} on post ${event.post.id}`);
 
-    return PostCreateCheckResult.Stop;
+    return { action: PostCreateCheckAction.Stop };
 }
 
 export const selfApprovalFlowFormDefinition: FormFunction = (data) => {

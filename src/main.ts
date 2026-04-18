@@ -1,13 +1,15 @@
 import { Devvit } from "@devvit/public-api";
 import { removeStickyCommentOnApprove } from "./stickyCommentRemover.js";
 import { handleSelfApprovalFlowModAction, handleSelfApprovalFlowPostDelete, handleSelfApprovalFormSubmit, handleSelfApprovalMenuItem, selfApprovalFlowFormDefinition, selfApprovalFlowSettings } from "./selfApprovalFlow.js";
-import { checkPostManually, settingsForOpenAI } from "./openAIChecks.js";
+import { settingsForOpenAI } from "./openAIChecks.js";
 import { handlePostCreate } from "./postCreation.js";
 import { handleInstallTasks } from "./installTasks.js";
+import { checkPostManually, settingsForSightengineChecks } from "./sightengineChecks.js";
 
 Devvit.addSettings([
     selfApprovalFlowSettings,
     ...settingsForOpenAI,
+    ...settingsForSightengineChecks,
 ]);
 
 export const selfApprovalFlowForm = Devvit.createForm(selfApprovalFlowFormDefinition, handleSelfApprovalFormSubmit);
@@ -53,6 +55,12 @@ Devvit.addTrigger({
 
 Devvit.configure({
     redditAPI: true,
+    http: {
+        domains: [
+            "api.openai.com",
+            "api.sightengine.com",
+        ],
+    },
 });
 
 export default Devvit;

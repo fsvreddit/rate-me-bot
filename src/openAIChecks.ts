@@ -1,10 +1,10 @@
 import { PostCreate } from "@devvit/protos";
-import { Context, MenuItemOnPressEvent, Post, SettingsFormField, TriggerContext } from "@devvit/public-api";
+import { JSONObject, Post, SettingsFormField, SettingsValues, TriggerContext } from "@devvit/public-api";
 import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod.js";
 import { ResponseInputMessageContentList } from "openai/resources/responses/responses.js";
 import { z } from "zod";
-import { PostCreateCheckResult } from "./postCreation.js";
+import { PostCreateCheckAction, PostCreateCheckResult } from "./postCreation.js";
 import { addHours } from "date-fns";
 
 enum OpenAISetting {
@@ -83,9 +83,10 @@ export const settingsForOpenAI: SettingsFormField[] = [
 
 interface ProbabilityResponse {
     probability: number;
+    imageUrl?: string;
 }
 
-export async function checkPostForSign (post: Post, context: TriggerContext): Promise<number> {
+export async function checkPostForSign (post: Post, context: TriggerContext): Promise<ProbabilityResponse> {
     const apiKey = await context.settings.get<string>(OpenAISetting.APIKey);
     if (!apiKey) {
         throw new Error("OpenAI API key not set");
@@ -103,7 +104,7 @@ export async function checkPostForSign (post: Post, context: TriggerContext): Pr
     const content: ResponseInputMessageContentList = [
         {
             type: "input_text",
-            text: "Do any of these images appear to contain a human holding a handwritten sign with text on it? Return the probability from 0 to 1 that this is the case.",
+            text: "Do any of these images appear to contain a human holding a handwritten sign with text on it? Return the probability from 0 to 1 that this is the case and the URL of the image most likely to contain such a sign if one exists.",
         },
     ];
 
@@ -118,6 +119,7 @@ export async function checkPostForSign (post: Post, context: TriggerContext): Pr
 
     const responseFormat = z.object({
         probability: z.number().min(0).max(1),
+        imageUrl: z.string().optional(),
     });
 
     const [model] = await context.settings.get<string[]>(OpenAISetting.OpenAIModel) as OpenAIModelOption[] | undefined ?? [OpenAIModelOption.GPT54Mini];
@@ -136,33 +138,19 @@ export async function checkPostForSign (post: Post, context: TriggerContext): Pr
     });
 
     const output = JSON.parse(response.output_text) as ProbabilityResponse;
-    return output.probability;
+    return output;
 }
 
-export async function checkPostManually (event: MenuItemOnPressEvent, context: Context) {
-    let probabilityOfSign: number;
-    try {
-        probabilityOfSign = await checkPostForSign(await context.reddit.getPostById(event.targetId), context);
-    } catch (e) {
-        const errorMessage = e instanceof Error ? e.message : JSON.stringify(e);
-        context.ui.showToast(`Error checking post: ${errorMessage}`);
-        return;
-    }
-
-    context.ui.showToast(`Probability of sign: ${probabilityOfSign * 100}%`);
-}
-
-export async function checkPostForSignDuringPostCreate (event: PostCreate, context: TriggerContext): Promise<PostCreateCheckResult> {
-    const settings = await context.settings.getAll();
+export async function checkPostForSignDuringPostCreate (event: PostCreate, settings: SettingsValues, context: TriggerContext): Promise<PostCreateCheckResult> {
     if (!settings[OpenAISetting.OpenAIChecksEnabled]) {
         console.log("OpenAI Checks: Checks are disabled in settings, skipping.");
-        return PostCreateCheckResult.Continue;
+        return { action: PostCreateCheckAction.Continue };
     }
 
     const postId = event.post?.id;
     if (!postId) {
         console.warn("OpenAI Checks: Post ID not found in event, skipping.");
-        return PostCreateCheckResult.Continue;
+        return { action: PostCreateCheckAction.Continue };
     }
 
     const post = await context.reddit.getPostById(postId);
@@ -171,11 +159,15 @@ export async function checkPostForSignDuringPostCreate (event: PostCreate, conte
     const cachedProbabilityValue = await context.redis.get(cachedResultKey);
 
     let probabilityOfSign: number;
+    let imageUrl: string | undefined;
     if (cachedProbabilityValue) {
         console.log(`OpenAI Checks: Using cached probability value for post ${postId}.`);
         probabilityOfSign = parseFloat(cachedProbabilityValue);
     } else {
-        probabilityOfSign = await checkPostForSign(post, context);
+        const result = await checkPostForSign(post, context);
+        probabilityOfSign = result.probability;
+        imageUrl = result.imageUrl;
+
         await context.redis.set(cachedResultKey, probabilityOfSign.toString(), { expiration: addHours(new Date(), 1) });
     }
 
@@ -194,9 +186,16 @@ export async function checkPostForSignDuringPostCreate (event: PostCreate, conte
 
         await post.remove();
         console.log(`OpenAI Checks: Removed post ${postId} due to low probability of containing a sign (${probabilityOfSign * 100}%).`);
-        return PostCreateCheckResult.Stop;
+        return { action: PostCreateCheckAction.Stop };
     }
 
     console.log(`OpenAI Checks: Post ${postId} has a probability of ${probabilityOfSign * 100}% of containing a sign, which is above the threshold of ${threshold}%.`);
-    return PostCreateCheckResult.Continue;
+
+    const data: JSONObject = {};
+    if (imageUrl) {
+        console.log(`OpenAI Checks: Image URL for post ${postId} that is most likely to contain a sign: ${imageUrl}`);
+        data.imageUrl = imageUrl;
+    }
+
+    return { action: PostCreateCheckAction.Continue, data };
 }
