@@ -6,6 +6,9 @@ enum SightengineChecksSetting {
     Enabled = "sightengineChecksEnabled",
     Threshold = "sightengineChecksThreshold",
     RemovalReason = "sightengineRemovalReason",
+    BanUser = "sightengineBanUser",
+    BanNote = "sightengineBanNote",
+    BanReason = "sightengineBanReason",
 
     // Secrets
     APIUser = "sightengineAPIUser",
@@ -43,6 +46,24 @@ export const settingsForSightengineChecks: SettingsFormField[] = [
                 name: SightengineChecksSetting.RemovalReason,
                 label: "Reason to use when removing content flagged by Sightengine checks",
                 defaultValue: "Content removed due to AI-generated content detected by Sightengine.",
+            },
+            {
+                type: "number",
+                name: SightengineChecksSetting.BanUser,
+                label: "Ban user when a post is removed by Sightengine checks for this many days (0 for no ban)",
+                defaultValue: 0,
+            },
+            {
+                type: "string",
+                name: SightengineChecksSetting.BanNote,
+                label: "Ban note",
+                defaultValue: "Likely AI verification image.",
+            },
+            {
+                type: "paragraph",
+                name: SightengineChecksSetting.BanReason,
+                label: "Ban reason",
+                defaultValue: "AI generated verification images are not permitted.",
             },
         ],
     },
@@ -175,6 +196,20 @@ export async function checkPostForAI (event: PostCreate, imageUrl: string, setti
 
     await post.remove();
     console.log(`Sightengine Checks: Removed post ${post.id} due to AI-generated content detected by Sightengine with a score of ${aiGeneratedScore}%.`);
+
+    const banDuration = settings[SightengineChecksSetting.BanUser] as number;
+    if (banDuration > 0) {
+        const banNote = settings[SightengineChecksSetting.BanNote] as string | undefined ?? "Likely AI verification image.";
+        const banReason = settings[SightengineChecksSetting.BanReason] as string | undefined ?? "AI generated verification images are not permitted.";
+        await context.reddit.banUser({
+            subredditName,
+            username: post.authorName,
+            duration: banDuration,
+            note: banNote,
+            reason: banReason,
+            context: post.id,
+        });
+    }
 
     return { action: PostCreateCheckAction.Stop };
 }
