@@ -4,7 +4,7 @@ import { handleSelfApprovalFlowModAction, handleSelfApprovalFlowPostDelete, hand
 import { settingsForOpenAI } from "./openAIChecks.js";
 import { handlePostCreate } from "./postCreation.js";
 import { handleInstallTasks } from "./installTasks.js";
-import { checkPostManually, settingsForSightengineChecks } from "./sightengineChecks.js";
+import { settingsForSightengineChecks } from "./sightengineChecks.js";
 
 Devvit.addSettings([
     selfApprovalFlowSettings,
@@ -19,13 +19,6 @@ Devvit.addMenuItem({
     description: "Request self-approval for your own post. Only the OP can use this",
     location: "post",
     onPress: handleSelfApprovalMenuItem,
-});
-
-Devvit.addMenuItem({
-    label: "Check for signs with OpenAI",
-    location: "post",
-    forUserType: "moderator",
-    onPress: checkPostManually,
 });
 
 Devvit.addTrigger({

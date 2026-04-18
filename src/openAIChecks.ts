@@ -119,7 +119,7 @@ export async function checkPostForSign (post: Post, context: TriggerContext): Pr
 
     const responseFormat = z.object({
         probability: z.number().min(0).max(1),
-        imageUrl: z.string().optional(),
+        imageUrl: z.string().optional().nullable(),
     });
 
     const [model] = await context.settings.get<string[]>(OpenAISetting.OpenAIModel) as OpenAIModelOption[] | undefined ?? [OpenAIModelOption.GPT54Mini];

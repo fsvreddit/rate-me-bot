@@ -1,4 +1,4 @@
-import { Context, MenuItemOnPressEvent, SettingsFormField, SettingsValues, TriggerContext } from "@devvit/public-api";
+import { SettingsFormField, SettingsValues, TriggerContext } from "@devvit/public-api";
 import { PostCreateCheckAction, PostCreateCheckResult } from "./postCreation.js";
 import { PostCreate } from "@devvit/protos";
 
@@ -212,19 +212,4 @@ export async function checkPostForAI (event: PostCreate, imageUrl: string, setti
     }
 
     return { action: PostCreateCheckAction.Stop };
-}
-
-export async function checkPostManually (_: MenuItemOnPressEvent, context: Context) {
-    if (!context.postId) {
-        console.warn("Sightengine Checks: No post ID found in context for manual check.");
-        context.ui.showToast("Error: No post ID found for manual check.");
-        return;
-    }
-
-    const post = await context.reddit.getPostById(context.postId);
-
-    const settings = await context.settings.getAll();
-    const aiGeneratedValue = await getAIImageLikelihood(post.url, settings);
-
-    context.ui.showToast(`Sightengine AI-generated score: ${aiGeneratedValue}%`);
 }
