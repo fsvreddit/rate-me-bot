@@ -6,11 +6,12 @@ import { ResponseInputMessageContentList } from "openai/resources/responses/resp
 import { z } from "zod";
 import { PostCreateCheckAction, PostCreateCheckResult } from "./postCreation.js";
 import { addHours } from "date-fns";
+import { validatePercentageSetting } from "./settingsHelpers.js";
 
 enum OpenAISetting {
     OpenAIChecksEnabled = "openAIChecksEnabled",
     OpenAIModel = "openAIModel",
-    ProbabilityThreshold = "openAIProbabilityThreshold",
+    ProbabilityThresholdForRemoval = "openAIProbabilityThreshold",
     RemovalReason = "openAIRemovalReason",
 
     // Secrets
@@ -51,18 +52,10 @@ export const settingsForOpenAI: SettingsFormField[] = [
             },
             {
                 type: "number",
-                name: OpenAISetting.ProbabilityThreshold,
+                name: OpenAISetting.ProbabilityThresholdForRemoval,
                 label: "Probability threshold for removal",
                 defaultValue: 70,
-                onValidate: ({ value }) => {
-                    if (!value) {
-                        return "This field is required.";
-                    }
-
-                    if (value < 0 || value > 100) {
-                        return "Please enter a value between 0 and 100.";
-                    }
-                },
+                onValidate: validatePercentageSetting,
             },
             {
                 type: "paragraph",
@@ -83,7 +76,31 @@ export const settingsForOpenAI: SettingsFormField[] = [
 
 interface ProbabilityResponse {
     probability: number;
-    fileId?: string;
+    imageUrl?: string;
+}
+
+interface IndexedImages {
+    url: string;
+    imageIndex: string;
+}
+
+function getImagesFromPost (post: Post): IndexedImages[] {
+    const images: IndexedImages[] = [];
+    let index = 0;
+    for (const item of post.gallery) {
+        images.push({
+            url: item.url,
+            imageIndex: index.toString(),
+        });
+        index++;
+    }
+    if (images.length === 0) {
+        images.push({
+            url: post.url,
+            imageIndex: "0",
+        });
+    }
+    return images;
 }
 
 export async function checkPostForSign (post: Post, context: TriggerContext): Promise<ProbabilityResponse> {
@@ -92,37 +109,41 @@ export async function checkPostForSign (post: Post, context: TriggerContext): Pr
         throw new Error("OpenAI API key not set");
     }
 
-    const images = post.gallery.map(item => item.url);
-    if (images.length === 0) {
-        images.push(post.url);
-    }
-
     const openAIClient = new OpenAI({
         apiKey,
     });
 
+    const imagesFromPost = getImagesFromPost(post);
+
     const content: ResponseInputMessageContentList = [
         {
             type: "input_text",
-            text: "Do any of these images appear to contain a human holding a handwritten sign with text on it? Return the probability from 0 to 1 that this is the case and the File ID as passed in alongside this prompt of the image most likely to contain such a sign if one exists.",
+            text: `You are given a list of images.
+
+Task:
+- Determine if any image contains a human holding a handwritten sign
+- Return the probability (0-1)
+- Return the URL of the most likely image
+
+Rules:
+- Only use URLs from this list: [${imagesFromPost.map(image => `"${image.url}"`).join(", ")}]
+- Do NOT return any other value for imageUrl
+- If none match, omit imageUrl`,
         },
     ];
 
-    for (const url of images) {
+    for (const entry of imagesFromPost) {
         content.push({
             type: "input_image",
             // eslint-disable-next-line camelcase
-            image_url: url,
-            // eslint-disable-next-line camelcase
-            file_id: url, // Using the URL as the file ID since we won't have a separate file ID from Reddit
+            image_url: entry.url,
             detail: "auto",
-
         });
     }
 
     const responseFormat = z.object({
         probability: z.number().min(0).max(1),
-        fileId: z.string().optional().nullable(),
+        imageUrl: z.string().optional().nullable(),
     });
 
     const [model] = await context.settings.get<string[]>(OpenAISetting.OpenAIModel) as OpenAIModelOption[] | undefined ?? [OpenAIModelOption.GPT54Mini];
@@ -139,6 +160,8 @@ export async function checkPostForSign (post: Post, context: TriggerContext): Pr
             format: zodTextFormat(responseFormat, "probability_of_sign"),
         },
     });
+
+    console.log(`OpenAI Checks: Post ${post.id} processed with model ${response.model}, ${response.usage?.input_tokens ?? "unknown"} input tokens used.`);
 
     const output = JSON.parse(response.output_text) as ProbabilityResponse;
     return output;
@@ -169,12 +192,15 @@ export async function checkPostForSignDuringPostCreate (event: PostCreate, setti
     } else {
         const result = await checkPostForSign(post, context);
         probabilityOfSign = result.probability;
-        imageUrl = result.fileId;
+        if (result.imageUrl) {
+            console.log(`OpenAI Checks: Image URL most likely to contain a sign for post ${postId}: ${result.imageUrl}`);
+            imageUrl = result.imageUrl;
+        }
 
         await context.redis.set(cachedResultKey, probabilityOfSign.toString(), { expiration: addHours(new Date(), 1) });
     }
 
-    const threshold = settings[OpenAISetting.ProbabilityThreshold] as number | undefined ?? 70;
+    const threshold = settings[OpenAISetting.ProbabilityThresholdForRemoval] as number | undefined ?? 70;
     if (probabilityOfSign < threshold / 100) {
         let removalReason = settings[OpenAISetting.RemovalReason] as string | undefined ?? "Removed due to low probability of containing a sign, as determined by OpenAI's image analysis.";
         const subredditName = context.subredditName ?? await context.reddit.getCurrentSubredditName();

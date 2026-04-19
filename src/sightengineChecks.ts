@@ -1,10 +1,12 @@
 import { SettingsFormField, SettingsValues, TriggerContext } from "@devvit/public-api";
 import { PostCreateCheckAction, PostCreateCheckResult } from "./postCreation.js";
 import { PostCreate } from "@devvit/protos";
+import { validatePercentageSetting } from "./settingsHelpers.js";
 
 enum SightengineChecksSetting {
     Enabled = "sightengineChecksEnabled",
-    Threshold = "sightengineChecksThreshold",
+    ThresholdForRemoval = "sightengineChecksThreshold",
+    ThresholdForApproval = "sightengineChecksThresholdForApproval",
     RemovalReason = "sightengineRemovalReason",
     BanUser = "sightengineBanUser",
     BanNote = "sightengineBanNote",
@@ -28,18 +30,19 @@ export const settingsForSightengineChecks: SettingsFormField[] = [
             },
             {
                 type: "number",
-                name: SightengineChecksSetting.Threshold,
+                name: SightengineChecksSetting.ThresholdForRemoval,
                 label: "Threshold for flagging content (0-100)",
+                helpText: "Content with an AI-generated score equal to or above this threshold will be removed.",
                 defaultValue: 70,
-                onValidate: ({ value }) => {
-                    if (value === undefined) {
-                        return "This field is required.";
-                    }
-                    if (value < 0 || value > 100) {
-                        return "Value must be between 0 and 100.";
-                    }
-                    return;
-                },
+                onValidate: validatePercentageSetting,
+            },
+            {
+                type: "number",
+                name: SightengineChecksSetting.ThresholdForApproval,
+                label: "Threshold for approving content (0-100)",
+                helpText: "Content with an AI-generated score below this threshold will be approved without human review. Content with a score between the approval and removal thresholds will be flagged for human review.",
+                defaultValue: 10,
+                onValidate: validatePercentageSetting,
             },
             {
                 type: "paragraph",
@@ -174,9 +177,13 @@ export async function checkPostForAI (event: PostCreate, imageUrl: string, setti
 
     console.log(`Sightengine Checks: AI-generated score for post ${event.post.id}: ${aiGeneratedScore}%`);
 
-    const threshold = settings[SightengineChecksSetting.Threshold] as number;
+    const threshold = settings[SightengineChecksSetting.ThresholdForRemoval] as number;
 
     if (aiGeneratedScore < threshold) {
+        const approvalThreshold = settings[SightengineChecksSetting.ThresholdForApproval] as number;
+        if (aiGeneratedScore < approvalThreshold) {
+            console.log(`Sightengine Checks: AI-generated score for post ${event.post.id} is below the approval threshold, and likely should be approved.`);
+        }
         return { action: PostCreateCheckAction.Continue };
     }
 
