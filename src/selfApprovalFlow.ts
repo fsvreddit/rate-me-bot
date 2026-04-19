@@ -357,7 +357,7 @@ export async function handleSelfApprovalFlowModAction (event: ModAction, context
         return;
     }
 
-    const removalActions = ["removelink", "spamlink", "lock"];
+    const removalActions = ["removelink", "spamlink", "lock", "addremovalreason"];
     if (removalActions.includes(event.action)) {
         if (!await context.redis.exists(getUserIneligibleRedisKey(event.targetPost.authorId))) {
             await context.redis.set(getUserIneligibleRedisKey(event.targetPost.authorId), "true", { expiration: addDays(new Date(), 28) });

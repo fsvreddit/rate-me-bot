@@ -121,7 +121,7 @@ export async function checkPostForSign (post: Post, context: TriggerContext): Pr
             text: `You are given a list of images.
 
 Task:
-- Determine if any image contains a human holding a handwritten sign
+- Determine if any image contains a human holding a handwritten sign.
 - Return the probability (0-1)
 - Return the URL of the most likely image
 
@@ -193,7 +193,6 @@ export async function checkPostForSignDuringPostCreate (event: PostCreate, setti
         const result = await checkPostForSign(post, context);
         probabilityOfSign = result.probability;
         if (result.imageUrl) {
-            console.log(`OpenAI Checks: Image URL most likely to contain a sign for post ${postId}: ${result.imageUrl}`);
             imageUrl = result.imageUrl;
         }
 
@@ -219,6 +218,7 @@ export async function checkPostForSignDuringPostCreate (event: PostCreate, setti
     }
 
     console.log(`OpenAI Checks: Post ${postId} has a probability of ${probabilityOfSign * 100}% of containing a sign, which is above the threshold of ${threshold}%.`);
+    console.log(`OpenAI Checks: Image URL most likely to contain a sign for post ${postId}: ${imageUrl}`);
 
     const data: JSONObject = {};
     if (imageUrl) {
