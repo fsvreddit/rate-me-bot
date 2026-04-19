@@ -8,7 +8,8 @@ enum SightengineChecksSetting {
     ThresholdForRemoval = "sightengineChecksThreshold",
     ThresholdForApproval = "sightengineChecksThresholdForApproval",
     RemovalReason = "sightengineRemovalReason",
-    BanUser = "sightengineBanUser",
+    EnableBan = "sightengineEnableBan",
+    BanDuration = "sightengineBanDuration",
     BanNote = "sightengineBanNote",
     BanReason = "sightengineBanReason",
 
@@ -51,10 +52,27 @@ export const settingsForSightengineChecks: SettingsFormField[] = [
                 defaultValue: "Content removed due to AI-generated content detected by Sightengine.",
             },
             {
+                type: "boolean",
+                name: SightengineChecksSetting.EnableBan,
+                label: "Enable automatic banning of users whose posts are removed by Sightengine checks",
+                defaultValue: false,
+            },
+            {
                 type: "number",
-                name: SightengineChecksSetting.BanUser,
-                label: "Ban user when a post is removed by Sightengine checks for this many days (0 for no ban)",
-                defaultValue: 0,
+                name: SightengineChecksSetting.BanDuration,
+                label: "Ban user when a post is removed by Sightengine checks for this many days (0 for permanent)",
+                defaultValue: 28,
+                onValidate: ({ value }) => {
+                    if (value === undefined) {
+                        return "This field is required.";
+                    }
+                    if (value < 0) {
+                        return "Please enter a value of 0 or greater.";
+                    }
+                    if (value > 999) {
+                        return "Please enter a value less than 1000.";
+                    }
+                },
             },
             {
                 type: "string",
@@ -204,19 +222,22 @@ export async function checkPostForAI (event: PostCreate, imageUrl: string, setti
     await post.remove();
     console.log(`Sightengine Checks: Removed post ${post.id} due to AI-generated content detected by Sightengine with a score of ${aiGeneratedScore}%.`);
 
-    const banDuration = settings[SightengineChecksSetting.BanUser] as number;
-    if (banDuration > 0) {
-        const banNote = settings[SightengineChecksSetting.BanNote] as string | undefined ?? "Likely AI verification image.";
-        const banReason = settings[SightengineChecksSetting.BanReason] as string | undefined ?? "AI generated verification images are not permitted.";
-        await context.reddit.banUser({
-            subredditName,
-            username: post.authorName,
-            duration: banDuration,
-            note: banNote,
-            reason: banReason,
-            context: post.id,
-        });
+    const banUser = settings[SightengineChecksSetting.EnableBan] as boolean;
+    if (!banUser) {
+        return { action: PostCreateCheckAction.Stop };
     }
+
+    const banDuration = settings[SightengineChecksSetting.BanDuration] as number;
+    const banNote = settings[SightengineChecksSetting.BanNote] as string | undefined ?? "Likely AI verification image.";
+    const banReason = settings[SightengineChecksSetting.BanReason] as string | undefined ?? "AI generated verification images are not permitted.";
+    await context.reddit.banUser({
+        subredditName,
+        username: post.authorName,
+        duration: banDuration === 0 ? undefined : banDuration,
+        note: banNote,
+        reason: banReason,
+        context: post.id,
+    });
 
     return { action: PostCreateCheckAction.Stop };
 }
