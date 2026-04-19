@@ -2,11 +2,12 @@ import { Devvit } from "@devvit/public-api";
 import { removeStickyCommentOnApprove } from "./stickyCommentRemover.js";
 import { handleSelfApprovalFlowModAction, handleSelfApprovalFlowPostDelete, handleSelfApprovalFormSubmit, handleSelfApprovalMenuItem, selfApprovalFlowFormDefinition, selfApprovalFlowSettings } from "./selfApprovalFlow.js";
 import { settingsForOpenAI } from "./openAIChecks.js";
-import { handlePostCreate } from "./postCreation.js";
+import { handlePostCreate, settingsForPostCreation } from "./postCreation.js";
 import { handleInstallTasks } from "./installTasks.js";
 import { settingsForSightengineChecks } from "./sightengineChecks.js";
 
 Devvit.addSettings([
+    settingsForPostCreation,
     selfApprovalFlowSettings,
     ...settingsForOpenAI,
     ...settingsForSightengineChecks,
