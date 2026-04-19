@@ -182,6 +182,12 @@ export async function handleSelfApprovalFlowPostCreate (event: PostCreate, setti
 
     if (!await userEligibleForSelfApproval(event.post, settings, context)) {
         console.log(`Self Approval: User ${event.post.authorId} not eligible for self-approval.`);
+        const post = await context.reddit.getPostById(event.post.id);
+        if (post.removed) {
+            console.log(`Self Approval: Post ${event.post.id} is already removed, skipping manual approval sticky comment.`);
+            return { action: PostCreateCheckAction.Continue };
+        }
+
         const stickyPostTextManualApproval = settings[SelfApprovalFlowSetting.StickyPostTextManualApproval] as string | undefined;
         if (stickyPostTextManualApproval) {
             const newComment = await context.reddit.submitComment({
