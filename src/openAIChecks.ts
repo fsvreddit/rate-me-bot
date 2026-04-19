@@ -218,7 +218,6 @@ export async function checkPostForSignDuringPostCreate (event: PostCreate, setti
     }
 
     console.log(`OpenAI Checks: Post ${postId} has a probability of ${probabilityOfSign * 100}% of containing a sign, which is above the threshold of ${threshold}%.`);
-    console.log(`OpenAI Checks: Image URL most likely to contain a sign for post ${postId}: ${imageUrl}`);
 
     const data: JSONObject = {};
     if (imageUrl) {
