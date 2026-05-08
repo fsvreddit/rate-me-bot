@@ -147,18 +147,25 @@ Rules:
 
     const [model] = await context.settings.get<string[]>(OpenAISetting.OpenAIModel) as OpenAIModelOption[] | undefined ?? [OpenAIModelOption.GPT54Mini];
 
-    const response = await openAIClient.responses.create({
-        model,
-        input: [
-            {
-                role: "user",
-                content,
+    let response: OpenAI.Responses.Response;
+    try {
+        response = await openAIClient.responses.create({
+            model,
+            input: [
+                {
+                    role: "user",
+                    content,
+                },
+            ],
+            text: {
+                format: zodTextFormat(responseFormat, "probability_of_sign"),
             },
-        ],
-        text: {
-            format: zodTextFormat(responseFormat, "probability_of_sign"),
-        },
-    });
+        });
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error(`OpenAI Checks: API request failed for post ${post.id} with error: ${errorMessage}`);
+        throw new Error(`OpenAI API request failed with error: ${errorMessage}`);
+    }
 
     console.log(`OpenAI Checks: Post ${post.id} processed with model ${response.model}, ${response.usage?.input_tokens ?? "unknown"} input tokens used.`);
 
