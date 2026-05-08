@@ -15,7 +15,7 @@ export async function removeStickyCommentOnApprove (event: ModAction, context: T
     const post = await context.reddit.getPostById(postId);
     const comments = await post.comments.all();
 
-    const appComments = comments.filter(comment => comment.stickied && (comment.authorName === "AutoModerator" || comment.authorName === context.appSlug));
+    const appComments = comments.filter(comment => comment.authorName === "AutoModerator" || comment.authorName === context.appSlug);
     if (appComments.length === 0) {
         return;
     }
