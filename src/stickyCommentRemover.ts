@@ -15,8 +15,8 @@ export async function removeStickyCommentOnApprove (event: ModAction, context: T
     const post = await context.reddit.getPostById(postId);
     const comments = await post.comments.all();
 
-    const stickyComment = comments.find(comment => comment.stickied && (comment.authorName === "AutoModerator" || comment.authorName === context.appSlug));
-    if (!stickyComment) {
+    const appComments = comments.filter(comment => comment.stickied && (comment.authorName === "AutoModerator" || comment.authorName === context.appSlug));
+    if (appComments.length === 0) {
         return;
     }
 
@@ -25,11 +25,13 @@ export async function removeStickyCommentOnApprove (event: ModAction, context: T
         return;
     }
 
-    if (stickyComment.authorName === context.appSlug) {
-        await stickyComment.delete();
-        console.log(`${event.action}: Deleted sticky comment from post ${postId}`);
-    } else {
-        await stickyComment.remove();
+    for (const appComment of appComments) {
+        if (appComment.authorName === context.appSlug) {
+            await appComment.delete();
+            console.log(`${event.action}: Deleted sticky comment from post ${postId}`);
+        } else {
+            await appComment.remove();
+        }
     }
 
     await context.redis.set(handledKey, "true", { expiration: addDays(new Date(), 28) });

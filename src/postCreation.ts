@@ -3,6 +3,7 @@ import { PostCreate } from "@devvit/protos";
 import { checkPostForSignDuringPostCreate } from "./openAIChecks.js";
 import { handleSelfApprovalFlowPostCreate } from "./selfApprovalFlow.js";
 import { checkPostForAI } from "./sightengineChecks.js";
+import { addDays } from "date-fns";
 
 enum PostCreationSetting {
     RemoveNSFWPosts = "postCreationRemoveNSFWPosts",
@@ -43,6 +44,13 @@ export async function handlePostCreate (event: PostCreate, context: TriggerConte
         console.log("Post Creation: No post ID available, skipping checks.");
         return;
     }
+
+    const postHandledKey = `postCreationHandled:${event.post.id}`;
+    if (await context.redis.exists(postHandledKey)) {
+        console.log(`Post Creation: Post ${event.post.id} has already been handled, skipping.`);
+        return;
+    }
+    await context.redis.set(postHandledKey, Date.now().toString(), { expiration: addDays(new Date(), 1) });
 
     const settings = await context.settings.getAll();
 

@@ -337,6 +337,7 @@ export async function handleSelfApprovalFlowPostDelete (event: PostDelete, conte
         return;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
     if (event.source as number !== 1) { // User
         return;
     }
