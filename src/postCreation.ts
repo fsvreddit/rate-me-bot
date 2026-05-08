@@ -59,7 +59,7 @@ export async function handlePostCreate (event: PostCreate, context: TriggerConte
     }
 
     await context.redis.zAdd(POST_CREATION_QUEUE, { member: event.post.id, score: Date.now() });
-    await context.redis.set(alreadyHandledKey, "true", { expiration: addDays(new Date(), 1) });
+    await context.redis.set(alreadyHandledKey, Date.now().toString(), { expiration: addDays(new Date(), 1) });
 
     console.log(`Post Creation: Added post ${event.post.id} to creation queue for processing.`);
 }
