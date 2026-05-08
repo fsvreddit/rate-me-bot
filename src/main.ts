@@ -2,9 +2,10 @@ import { Devvit } from "@devvit/public-api";
 import { removeStickyCommentOnApprove } from "./stickyCommentRemover.js";
 import { handleSelfApprovalFlowModAction, handleSelfApprovalFlowPostDelete, handleSelfApprovalFormSubmit, handleSelfApprovalMenuItem, selfApprovalFlowFormDefinition, selfApprovalFlowSettings } from "./selfApprovalFlow.js";
 import { settingsForOpenAI } from "./openAIChecks.js";
-import { handlePostCreate, settingsForPostCreation } from "./postCreation.js";
+import { handlePostCreate, processPostCreationQueue, settingsForPostCreation } from "./postCreation.js";
 import { handleInstallTasks } from "./installTasks.js";
 import { settingsForSightengineChecks } from "./sightengineChecks.js";
+import { SchedulerJob } from "./constants.js";
 
 Devvit.addSettings([
     settingsForPostCreation,
@@ -45,6 +46,11 @@ Devvit.addTrigger({
 Devvit.addTrigger({
     event: "ModAction",
     onEvent: handleSelfApprovalFlowModAction,
+});
+
+Devvit.addSchedulerJob({
+    name: SchedulerJob.ProcessPostCreationQueue,
+    onRun: processPostCreationQueue,
 });
 
 Devvit.configure({

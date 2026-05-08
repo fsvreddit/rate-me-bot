@@ -1,15 +1,12 @@
-import { Context, FormField, FormFunction, FormOnSubmitEvent, JSONObject, MenuItemOnPressEvent, SettingsFormField, SettingsValues, TriggerContext, User } from "@devvit/public-api";
-import { ModAction, PostCreate, PostDelete } from "@devvit/protos";
+import { Context, FormField, FormFunction, FormOnSubmitEvent, JSONObject, MenuItemOnPressEvent, Post, SettingsFormField, SettingsValues, TriggerContext, User } from "@devvit/public-api";
+import { ModAction, PostDelete } from "@devvit/protos";
 import { addDays, format, subDays } from "date-fns";
 import { selfApprovalFlowForm } from "./main.js";
-import { getUserExtended } from "./extendedDevvit.js";
-import { PostV2 } from "@devvit/protos/types/devvit/reddit/v2alpha/postv2.js";
 import { isModerator } from "devvit-helpers";
 import { PostCreateCheckAction, PostCreateCheckResult } from "./postCreation.js";
 
 enum SelfApprovalFlowSetting {
     Enabled = "selfApprovalFlowEnabled",
-    PostIdRegex = "selfApprovalFlowPostIdRegex",
     StickyPostText = "selfApprovalFlowStickyPostText",
     StickyPostTextManualApproval = "selfApprovalFlowStickyPostTextManualApproval",
     RuleList = "selfApprovalFlowRuleList",
@@ -28,11 +25,6 @@ export const selfApprovalFlowSettings: SettingsFormField = {
             type: "boolean",
             label: "Enable Self-Approval Flow",
             defaultValue: false,
-        },
-        {
-            name: SelfApprovalFlowSetting.PostIdRegex,
-            type: "string",
-            label: "Post ID Regex",
         },
         {
             name: SelfApprovalFlowSetting.StickyPostText,
@@ -93,7 +85,7 @@ function getUserIneligibleRedisKey (userId: string): string {
     return `selfApprovalFlow:ineligibleUser:${userId}`;
 }
 
-async function userEligibleForSelfApproval (post: PostV2, settings: SettingsValues, context: TriggerContext): Promise<boolean> {
+async function userEligibleForSelfApproval (post: Post, settings: SettingsValues, context: TriggerContext): Promise<boolean> {
     const ineligibleTitleRegex = settings[SelfApprovalFlowSetting.IneligibleTitleRegex] as string | undefined;
     if (ineligibleTitleRegex) {
         const regex = new RegExp(ineligibleTitleRegex);
@@ -105,7 +97,7 @@ async function userEligibleForSelfApproval (post: PostV2, settings: SettingsValu
 
     let user: User | undefined;
     try {
-        user = await context.reddit.getUserById(post.authorId);
+        user = await context.reddit.getUserByUsername(post.authorName);
     } catch (error) {
         console.error("Self Approval: Error fetching user:", error);
         return false;
@@ -153,8 +145,7 @@ async function userEligibleForSelfApproval (post: PostV2, settings: SettingsValu
         return false;
     }
 
-    const userExtended = await getUserExtended(user.username, context);
-    if (userExtended?.nsfw) {
+    if (user.nsfw) {
         console.log(`Self Approval: User ${user.username} has an NSFW account, not eligible for self-approval.`);
         return false;
     }
@@ -162,63 +153,48 @@ async function userEligibleForSelfApproval (post: PostV2, settings: SettingsValu
     return true;
 }
 
-export async function handleSelfApprovalFlowPostCreate (event: PostCreate, settings: SettingsValues, context: TriggerContext): Promise<PostCreateCheckResult> {
-    if (!event.post?.id || !event.post.authorId || !event.author?.name) {
-        return { action: PostCreateCheckAction.Continue };
-    }
-
+export async function handleSelfApprovalFlowPostCreate (post: Post, settings: SettingsValues, context: TriggerContext): Promise<PostCreateCheckResult> {
     if (!settings[SelfApprovalFlowSetting.Enabled]) {
         return { action: PostCreateCheckAction.Continue };
     }
 
-    const postIdRegex = settings[SelfApprovalFlowSetting.PostIdRegex] as string | undefined;
-    if (postIdRegex) {
-        const regex = new RegExp(postIdRegex);
-        if (!regex.test(event.post.id)) {
-            console.log(`Self Approval: Post ID ${event.post.id} does not match regex ${postIdRegex}.`);
-            return { action: PostCreateCheckAction.Continue };
-        }
-    }
-
-    if (!await userEligibleForSelfApproval(event.post, settings, context)) {
-        console.log(`Self Approval: User ${event.post.authorId} not eligible for self-approval.`);
-        const post = await context.reddit.getPostById(event.post.id);
+    if (!await userEligibleForSelfApproval(post, settings, context)) {
+        console.log(`Self Approval: User ${post.authorName} not eligible for self-approval.`);
         if (post.removed) {
-            console.log(`Self Approval: Post ${event.post.id} is already removed, skipping manual approval sticky comment.`);
+            console.log(`Self Approval: Post ${post.id} is already removed, skipping manual approval sticky comment.`);
             return { action: PostCreateCheckAction.Continue };
         }
 
         const stickyPostTextManualApproval = settings[SelfApprovalFlowSetting.StickyPostTextManualApproval] as string | undefined;
         if (stickyPostTextManualApproval) {
             const newComment = await context.reddit.submitComment({
-                id: event.post.id,
+                id: post.id,
                 text: stickyPostTextManualApproval,
             });
             await newComment.distinguish(true);
-            console.log(`Self Approval: Created manual approval sticky comment ${newComment.id} on post ${event.post.id}`);
+            console.log(`Self Approval: Created manual approval sticky comment ${newComment.id} on post ${post.id}`);
         }
         return { action: PostCreateCheckAction.Continue };
     }
 
     const subredditName = context.subredditName ?? await context.reddit.getCurrentSubredditName();
-    if (await isModerator(context.reddit, subredditName, event.author.name)) {
-        console.log(`Self Approval: User ${event.author.name} is a mod, skipping self-approval flow.`);
+    if (await isModerator(context.reddit, subredditName, post.authorName)) {
+        console.log(`Self Approval: User ${post.authorName} is a mod, skipping self-approval flow.`);
         return { action: PostCreateCheckAction.Continue };
     }
 
-    const post = await context.reddit.getPostById(event.post.id);
     if (post.removed) {
-        console.log(`Self Approval: Post ${event.post.id} is already removed, skipping self-approval flow.`);
+        console.log(`Self Approval: Post ${post.id} is already removed, skipping self-approval flow.`);
         return { action: PostCreateCheckAction.Continue };
     }
 
     if (post.approved) {
-        console.log(`Self Approval: Post ${event.post.id} is already approved, skipping self-approval flow.`);
+        console.log(`Self Approval: Post ${post.id} is already approved, skipping self-approval flow.`);
         return { action: PostCreateCheckAction.Continue };
     }
 
-    await context.redis.set(getSelfApprovalFlowRedisKey(event.post.id), "true", { expiration: addDays(new Date(), 28) });
-    await context.reddit.remove(event.post.id, false);
+    await context.redis.set(getSelfApprovalFlowRedisKey(post.id), "true", { expiration: addDays(new Date(), 28) });
+    await context.reddit.remove(post.id, false);
 
     const stickyPostText = settings[SelfApprovalFlowSetting.StickyPostText] as string | undefined;
     if (!stickyPostText) {
@@ -227,12 +203,12 @@ export async function handleSelfApprovalFlowPostCreate (event: PostCreate, setti
     }
 
     const newComment = await context.reddit.submitComment({
-        id: event.post.id,
+        id: post.id,
         text: stickyPostText,
     });
 
     await newComment.distinguish(true);
-    console.log(`Self Approval: Created sticky comment ${newComment.id} on post ${event.post.id}`);
+    console.log(`Self Approval: Created sticky comment ${newComment.id} on post ${post.id}`);
 
     return { action: PostCreateCheckAction.Stop };
 }

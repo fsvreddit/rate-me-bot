@@ -1,6 +1,5 @@
-import { SettingsFormField, SettingsValues, TriggerContext } from "@devvit/public-api";
+import { Post, SettingsFormField, SettingsValues, TriggerContext } from "@devvit/public-api";
 import { PostCreateCheckAction, PostCreateCheckResult } from "./postCreation.js";
-import { PostCreate } from "@devvit/protos";
 import { validatePercentageSetting } from "./settingsHelpers.js";
 
 enum SightengineChecksSetting {
@@ -176,12 +175,7 @@ async function getAIImageLikelihood (imageUrl: string, settings: SettingsValues)
     return result.type.ai_generated * 100;
 }
 
-export async function checkPostForAI (event: PostCreate, imageUrl: string, settings: SettingsValues, context: TriggerContext): Promise<PostCreateCheckResult> {
-    if (!event.post?.id) {
-        console.warn("Sightengine Checks: No post ID found in event, skipping checks.");
-        return { action: PostCreateCheckAction.Continue };
-    }
-
+export async function checkPostForAI (post: Post, imageUrl: string, settings: SettingsValues, context: TriggerContext): Promise<PostCreateCheckResult> {
     if (!settings[SightengineChecksSetting.Enabled]) {
         return { action: PostCreateCheckAction.Continue };
     }
@@ -193,25 +187,24 @@ export async function checkPostForAI (event: PostCreate, imageUrl: string, setti
         return { action: PostCreateCheckAction.Continue };
     }
 
-    console.log(`Sightengine Checks: AI-generated score for post ${event.post.id}: ${aiGeneratedScore}%`);
+    console.log(`Sightengine Checks: AI-generated score for post ${post.id}: ${aiGeneratedScore}%`);
 
     const threshold = settings[SightengineChecksSetting.ThresholdForRemoval] as number;
 
     if (aiGeneratedScore < threshold) {
         const approvalThreshold = settings[SightengineChecksSetting.ThresholdForApproval] as number;
         if (aiGeneratedScore < approvalThreshold) {
-            console.log(`Sightengine Checks: AI-generated score for post ${event.post.id} is below the approval threshold, and likely should be approved.`);
+            console.log(`Sightengine Checks: AI-generated score for post ${post.id} is below the approval threshold, and likely should be approved.`);
         }
         return { action: PostCreateCheckAction.Continue };
     }
 
-    console.log(`Sightengine Checks: AI-generated score exceeds threshold for post ${event.post.id}, taking action.`);
+    console.log(`Sightengine Checks: AI-generated score exceeds threshold for post ${post.id}, taking action.`);
 
     let removalReason = settings[SightengineChecksSetting.RemovalReason] as string | undefined ?? "Removed due to AI-generated content detected by Sightengine.";
     const subredditName = context.subredditName ?? await context.reddit.getCurrentSubredditName();
     removalReason += `\n\n*I am a bot, and this action was performed automatically. Please [contact the moderators of this subreddit](/message/compose/?to=/r/${subredditName}) if you have any questions or concerns.*`;
 
-    const post = await context.reddit.getPostById(event.post.id);
     const newComment = await context.reddit.submitComment({
         id: post.id,
         text: removalReason,

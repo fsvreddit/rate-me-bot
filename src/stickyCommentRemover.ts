@@ -1,6 +1,7 @@
 import { TriggerContext } from "@devvit/public-api";
 import { ModAction } from "@devvit/protos";
 import { addDays } from "date-fns";
+import { removePostFromPostCreationQueue } from "./postCreation.js";
 
 export async function removeStickyCommentOnApprove (event: ModAction, context: TriggerContext) {
     if (event.action !== "approvelink") {
@@ -11,6 +12,8 @@ export async function removeStickyCommentOnApprove (event: ModAction, context: T
     if (!postId) {
         return;
     }
+
+    await removePostFromPostCreationQueue(postId, context);
 
     const post = await context.reddit.getPostById(postId);
     const comments = await post.comments.all();

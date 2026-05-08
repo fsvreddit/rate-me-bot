@@ -1,4 +1,3 @@
-import { PostCreate } from "@devvit/protos";
 import { JSONObject, Post, SettingsFormField, SettingsValues, TriggerContext } from "@devvit/public-api";
 import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod.js";
@@ -167,27 +166,19 @@ Rules:
     return output;
 }
 
-export async function checkPostForSignDuringPostCreate (event: PostCreate, settings: SettingsValues, context: TriggerContext): Promise<PostCreateCheckResult> {
+export async function checkPostForSignDuringPostCreate (post: Post, settings: SettingsValues, context: TriggerContext): Promise<PostCreateCheckResult> {
     if (!settings[OpenAISetting.OpenAIChecksEnabled]) {
         console.log("OpenAI Checks: Checks are disabled in settings, skipping.");
         return { action: PostCreateCheckAction.Continue };
     }
 
-    const postId = event.post?.id;
-    if (!postId) {
-        console.warn("OpenAI Checks: Post ID not found in event, skipping.");
-        return { action: PostCreateCheckAction.Continue };
-    }
-
-    const post = await context.reddit.getPostById(postId);
-
-    const cachedResultKey = `openAICheckResult:${postId}`;
+    const cachedResultKey = `openAICheckResult:${post.id}`;
     const cachedProbabilityValue = await context.redis.get(cachedResultKey);
 
     let probabilityOfSign: number;
     let imageUrl: string | undefined;
     if (cachedProbabilityValue) {
-        console.log(`OpenAI Checks: Using cached probability value for post ${postId}.`);
+        console.log(`OpenAI Checks: Using cached probability value for post ${post.id}.`);
         probabilityOfSign = parseFloat(cachedProbabilityValue);
     } else {
         const result = await checkPostForSign(post, context);
@@ -206,26 +197,26 @@ export async function checkPostForSignDuringPostCreate (event: PostCreate, setti
         removalReason += `\n\n*I am a bot, and this action was performed automatically. Please [contact the moderators of this subreddit](/message/compose/?to=/r/${subredditName}) if you have any questions or concerns.*`;
 
         const newComment = await context.reddit.submitComment({
-            id: postId,
+            id: post.id,
             text: removalReason,
         });
 
         await newComment.distinguish(true);
 
         await post.remove();
-        console.log(`OpenAI Checks: Removed post ${postId} due to low probability of containing a sign (${probabilityOfSign * 100}%).`);
+        console.log(`OpenAI Checks: Removed post ${post.id} due to low probability of containing a sign (${probabilityOfSign * 100}%).`);
         return { action: PostCreateCheckAction.Stop };
     }
 
-    console.log(`OpenAI Checks: Post ${postId} has a probability of ${probabilityOfSign * 100}% of containing a sign, which is above the threshold of ${threshold}%.`);
+    console.log(`OpenAI Checks: Post ${post.id} has a probability of ${probabilityOfSign * 100}% of containing a sign, which is above the threshold of ${threshold}%.`);
 
     const data: JSONObject = {};
     if (imageUrl) {
         if (imageUrl.startsWith("http")) {
-            console.log(`OpenAI Checks: Image URL for post ${postId} that is most likely to contain a sign: ${imageUrl}`);
+            console.log(`OpenAI Checks: Image URL for post ${post.id} that is most likely to contain a sign: ${imageUrl}`);
             data.imageUrl = imageUrl;
         } else {
-            console.warn(`OpenAI Checks: Received image URL that does not appear to be valid for post ${postId}: ${imageUrl}`);
+            console.warn(`OpenAI Checks: Received image URL that does not appear to be valid for post ${post.id}: ${imageUrl}`);
         }
     }
 
