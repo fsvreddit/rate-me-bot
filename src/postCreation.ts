@@ -90,6 +90,11 @@ export async function processPostCreationQueue (event: ScheduledJobEvent<JSONObj
     const post = await context.reddit.getPostById(firstPost);
     await context.redis.zRem(POST_CREATION_QUEUE, [firstPost]);
 
+    if (post.authorName === "[deleted]") {
+        console.log(`Post Creation: Post ${post.id} was deleted before processing, skipping.`);
+        return;
+    }
+
     await handlePost(post, context);
 
     if (queue.length > 0) {
