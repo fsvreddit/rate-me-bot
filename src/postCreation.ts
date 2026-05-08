@@ -3,7 +3,7 @@ import { PostCreate } from "@devvit/protos";
 import { checkPostForSignDuringPostCreate } from "./openAIChecks.js";
 import { handleSelfApprovalFlowPostCreate } from "./selfApprovalFlow.js";
 import { checkPostForAI } from "./sightengineChecks.js";
-import { addSeconds } from "date-fns";
+import { addDays, addSeconds } from "date-fns";
 import { SchedulerJob } from "./constants.js";
 
 enum PostCreationSetting {
@@ -59,7 +59,7 @@ export async function handlePostCreate (event: PostCreate, context: TriggerConte
     }
 
     await context.redis.zAdd(POST_CREATION_QUEUE, { member: event.post.id, score: Date.now() });
-    await context.redis.set(alreadyHandledKey, "true", { expiration: addSeconds(new Date(), 60) });
+    await context.redis.set(alreadyHandledKey, "true", { expiration: addDays(new Date(), 1) });
 
     console.log(`Post Creation: Added post ${event.post.id} to creation queue for processing.`);
 }
