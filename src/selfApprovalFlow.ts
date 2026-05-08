@@ -3,7 +3,7 @@ import { ModAction, PostDelete } from "@devvit/protos";
 import { addDays, format, subDays } from "date-fns";
 import { selfApprovalFlowForm } from "./main.js";
 import { isModerator } from "devvit-helpers";
-import { PostCreateCheckAction, PostCreateCheckResult } from "./postCreation.js";
+import { PostCreateCheckAction, PostCreateCheckResult, removePostFromPostCreationQueue } from "./postCreation.js";
 
 enum SelfApprovalFlowSetting {
     Enabled = "selfApprovalFlowEnabled",
@@ -339,6 +339,8 @@ export async function handleSelfApprovalFlowModAction (event: ModAction, context
     if (event.moderator?.name === context.appSlug || event.moderator?.name === "AutoModerator") {
         return;
     }
+
+    await removePostFromPostCreationQueue(event.targetPost.id, context);
 
     const removalActions = ["removelink", "spamlink", "lock", "addremovalreason"];
     if (removalActions.includes(event.action)) {
