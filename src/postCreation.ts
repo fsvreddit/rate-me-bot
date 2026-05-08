@@ -52,7 +52,16 @@ export async function handlePostCreate (event: PostCreate, context: TriggerConte
         return;
     }
 
+    const alreadyHandledKey = `postCreationAlreadyHandled:${event.post.id}`;
+    if (await context.redis.exists(alreadyHandledKey)) {
+        console.log(`Post Creation: Post ${event.post.id} already handled, skipping.`);
+        return;
+    }
+
     await context.redis.zAdd(POST_CREATION_QUEUE, { member: event.post.id, score: Date.now() });
+    await context.redis.set(alreadyHandledKey, "true", { expiration: addSeconds(new Date(), 60) });
+
+    console.log(`Post Creation: Added post ${event.post.id} to creation queue for processing.`);
 }
 
 export async function processPostCreationQueue (event: ScheduledJobEvent<JSONObject | undefined>, context: JobContext) {
